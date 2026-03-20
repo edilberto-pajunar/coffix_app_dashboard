@@ -173,7 +173,7 @@ export default function ProductsPage() {
     try {
       const data = {
         name: categoryForm.name.trim(),
-        ...(categoryForm.order !== "" ? { order: parseInt(categoryForm.order) } : {}),
+        ...(categoryForm.order !== "" ? { order: categoryForm.order } : {}),
       };
       if (categoryDialog === "create") {
         await ProductService.createCategory(data);
