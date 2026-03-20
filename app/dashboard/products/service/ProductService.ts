@@ -50,8 +50,16 @@ export const ProductService = {
       onUpdate(snapToArray<Category>(snap)),
     ),
 
-  createProduct: (data: Omit<Product, "docId">) =>
-    addDoc(collection(db, "products"), data),
+  createProduct: async (data: Omit<Product, "docId">) => {
+    const ref = doc(collection(db, "products")); // ✅ auto გენ ID
+
+    await setDoc(ref, {
+      ...data,
+      docId: ref.id, // optional: store the ID inside the document
+    });
+
+    return ref;
+  },
 
   updateProduct: (docId: string, data: Partial<Omit<Product, "docId">>) =>
     updateDoc(doc(db, "products", docId), data as DocumentData),
