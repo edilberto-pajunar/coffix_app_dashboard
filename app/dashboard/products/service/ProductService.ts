@@ -69,7 +69,10 @@ export const ProductService = {
   createModifier: async (data: Omit<Modifier, "docId">) => {
     const docId = formatDocId(data.label ?? "");
     const ref = doc(db, "modifiers", docId);
-    await setDoc(ref, data);
+    await setDoc(ref, {
+      ...data,
+      docId: docId, // optional: store the ID inside the document
+    });
     return ref;
   },
 
@@ -81,7 +84,10 @@ export const ProductService = {
   createModifierGroup: async (data: Omit<ModifierGroup, "docId">) => {
     const docId = formatDocId(data.name ?? "");
     const ref = doc(db, "modifierGroups", docId);
-    await setDoc(ref, data);
+    await setDoc(ref, {
+      ...data,
+      docId: docId, // optional: store the ID inside the document
+    });
     return ref;
   },
 
