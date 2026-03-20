@@ -5,6 +5,7 @@ import {
   doc,
   DocumentData,
   onSnapshot,
+  setDoc,
   Unsubscribe,
   updateDoc,
 } from "firebase/firestore";
@@ -20,8 +21,14 @@ export const StoreService = {
       onUpdate(stores);
     }),
 
-  createStore: (data: Omit<Store, "docId">) =>
-    addDoc(collection(db, "stores"), data),
+  createStore: async (data: Omit<Store, "docId">) => {
+    const ref = doc(collection(db, "stores")); // ✅ auto გენ ID
+    await setDoc(ref, {
+      ...data,
+      docId: ref.id, // optional: store the ID inside the document
+    });
+    return ref;
+  },
 
   updateStore: (docId: string, data: Partial<Omit<Store, "docId">>) =>
     updateDoc(doc(db, "stores", docId), data as DocumentData),
