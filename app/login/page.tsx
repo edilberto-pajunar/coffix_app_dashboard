@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { toast } from "sonner";
-import { auth } from "@/app/lib/firebase";
 import { useAuth } from "@/app/lib/AuthContext";
+import { auth } from "../lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
