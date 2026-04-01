@@ -152,13 +152,12 @@ export default function StoresPage() {
               <th className="px-5 py-3 text-left font-medium text-light-grey">Contact</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Printer ID</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Status</th>
-              <th className="px-5 py-3 text-right font-medium text-light-grey">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {stores.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
                   No stores found.
                 </td>
               </tr>
@@ -168,7 +167,11 @@ export default function StoresPage() {
                 const isDisabled = store.disable ?? false;
 
                 return (
-                  <tr key={store.docId} className="transition-colors hover:bg-background">
+                  <tr
+                    key={store.docId}
+                    onClick={() => router.push(`/dashboard/stores/${store.docId}`)}
+                    className="cursor-pointer transition-colors hover:bg-background"
+                  >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         {store.imageUrl ? (
@@ -214,14 +217,6 @@ export default function StoresPage() {
                           Closed
                         </span>
                       )}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => router.push(`/dashboard/stores/${store.docId}`)}
-                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-black transition-colors hover:border-primary hover:text-primary"
-                      >
-                        View
-                      </button>
                     </td>
                   </tr>
                 );

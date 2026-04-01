@@ -4,6 +4,11 @@ export interface DayHours {
   close?: string; // "14:30"
 }
 
+export interface HolidayHours extends DayHours {
+  title?: string;       // e.g. "Good Friday"
+  description?: string; // e.g. "Reduced hours for public holiday"
+}
+
 export interface Store {
   address?: string;
   disable?: boolean;
@@ -14,6 +19,7 @@ export interface Store {
   location?: string;
   name?: string;
   openingHours?: Record<string, DayHours>;
+  holidayHours?: Record<string, HolidayHours>; // keys: "yyyy-mm-dd"
   storeCode?: string;
   email?: string;
   contactNumber?: string;
@@ -21,10 +27,15 @@ export interface Store {
 }
 
 export function isStoreOpenAt(store: Store, dt: Date = new Date()): boolean {
-  const key = weekdayKey(dt.getDay());
-  const hours = store.openingHours?.[key];
+  const hours = effectiveHoursFor(store, dt);
   if (!hours || hours.isOpen === false) return false;
   return dayHoursContains(hours, dt);
+}
+
+export function effectiveHoursFor(store: Store, date: Date = new Date()): HolidayHours | DayHours | undefined {
+  const dateKey = date.toLocaleDateString("en-CA"); // "yyyy-mm-dd" in local time
+  if (store.holidayHours?.[dateKey]) return store.holidayHours[dateKey];
+  return store.openingHours?.[weekdayKey(date.getDay())];
 }
 
 export function weekdayKey(day: number): string {

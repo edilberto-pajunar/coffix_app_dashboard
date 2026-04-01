@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Image from "next/image";
 import { useStoreStore } from "../store/useStoreStore";
-import { isStoreOpenAt, DayHours, Store } from "../interface/store";
+import { isStoreOpenAt, DayHours, HolidayHours, Store } from "../interface/store";
 import { StoreService } from "../service/StoreService";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
@@ -29,6 +29,26 @@ type StoreEditForm = {
 const REQUIRED: (keyof Omit<StoreEditForm, "openingHours">)[] = [
   "name", "storeCode", "email", "contactNumber", "location", "address",
 ];
+
+type DialogMode = "edit-store" | "add-holiday" | "edit-holiday" | "delete-holiday" | null;
+
+type HolidayForm = {
+  date: string;
+  title: string;
+  description: string;
+  isOpen: boolean;
+  open: string;
+  close: string;
+};
+
+const emptyHolidayForm: HolidayForm = {
+  date: "",
+  title: "",
+  description: "",
+  isOpen: true,
+  open: "08:00",
+  close: "17:00",
+};
 
 function storeToForm(store: Store): StoreEditForm {
   const openingHours = Object.fromEntries(
@@ -59,10 +79,14 @@ export default function StoreDetailPage() {
 
   const stores = useStoreStore((s) => s.stores);
 
-  const [showEdit, setShowEdit] = useState(false);
+  const [dialog, setDialog] = useState<DialogMode>(null);
   const [form, setForm] = useState<StoreEditForm | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof StoreEditForm, boolean>>>({});
   const [loading, setLoading] = useState(false);
+
+  const [holidayForm, setHolidayForm] = useState<HolidayForm>(emptyHolidayForm);
+  const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [holidayErrors, setHolidayErrors] = useState<{ date?: boolean }>({});
 
   const store = stores.find((s) => s.docId === storeId);
 
@@ -70,13 +94,95 @@ export default function StoreDetailPage() {
     if (!store) return;
     setForm(storeToForm(store));
     setErrors({});
-    setShowEdit(true);
+    setDialog("edit-store");
   }
 
-  function closeEdit() {
-    setShowEdit(false);
+  function closeDialog() {
+    setDialog(null);
     setForm(null);
     setErrors({});
+    setHolidayForm(emptyHolidayForm);
+    setEditingDate(null);
+    setHolidayErrors({});
+  }
+
+  function openAddHoliday() {
+    setHolidayForm(emptyHolidayForm);
+    setHolidayErrors({});
+    setEditingDate(null);
+    setDialog("add-holiday");
+  }
+
+  function openEditHoliday(dateKey: string, entry: HolidayHours) {
+    setHolidayForm({
+      date: dateKey,
+      title: entry.title ?? "",
+      description: entry.description ?? "",
+      isOpen: entry.isOpen ?? true,
+      open: entry.open ?? "08:00",
+      close: entry.close ?? "17:00",
+    });
+    setHolidayErrors({});
+    setEditingDate(dateKey);
+    setDialog("edit-holiday");
+  }
+
+  function openDeleteHoliday(dateKey: string) {
+    setEditingDate(dateKey);
+    setDialog("delete-holiday");
+  }
+
+  async function handleSaveHoliday() {
+    if (!store) return;
+    if (!holidayForm.date) {
+      setHolidayErrors({ date: true });
+      return;
+    }
+
+    const entry: HolidayHours = {
+      isOpen: holidayForm.isOpen,
+      ...(holidayForm.title.trim() && { title: holidayForm.title.trim() }),
+      ...(holidayForm.description.trim() && { description: holidayForm.description.trim() }),
+      ...(holidayForm.isOpen && { open: holidayForm.open, close: holidayForm.close }),
+    };
+
+    const updatedMap: Record<string, HolidayHours> = { ...store.holidayHours };
+
+    // If editing and date key changed, remove the old key
+    if (editingDate && editingDate !== holidayForm.date) {
+      delete updatedMap[editingDate];
+    }
+    updatedMap[holidayForm.date] = entry;
+
+    setLoading(true);
+    try {
+      await StoreService.updateStore(store.docId, { holidayHours: updatedMap });
+      toast.success(editingDate ? "Holiday updated." : "Holiday added.");
+      closeDialog();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save holiday. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDeleteHoliday() {
+    if (!store || !editingDate) return;
+    const updatedMap: Record<string, HolidayHours> = { ...store.holidayHours };
+    delete updatedMap[editingDate];
+
+    setLoading(true);
+    try {
+      await StoreService.updateStore(store.docId, { holidayHours: updatedMap });
+      toast.success("Holiday removed.");
+      closeDialog();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to delete holiday. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function setField<K extends keyof Omit<StoreEditForm, "openingHours">>(key: K, value: string) {
@@ -127,7 +233,7 @@ export default function StoreDetailPage() {
         openingHours,
       });
       toast.success("Store updated successfully.");
-      closeEdit();
+      closeDialog();
     } catch (err) {
       console.error(err);
       toast.error("Failed to update store. Please try again.");
@@ -247,16 +353,87 @@ export default function StoreDetailPage() {
         </div>
       </div>
 
-      {/* Edit Dialog */}
-      {showEdit && form && (
+      {/* Holiday Hours Card */}
+      {(() => {
+        const today = new Date().toLocaleDateString("en-CA");
+        const entries = Object.entries(store.holidayHours ?? {}).sort(([a], [b]) => a.localeCompare(b));
+        const upcoming = entries.filter(([d]) => d >= today);
+        const past = entries.filter(([d]) => d < today);
+        const sorted = [...upcoming, ...past];
+
+        return (
+          <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2 className="font-semibold text-black">Holiday Hours</h2>
+              <button
+                onClick={openAddHoliday}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
+              >
+                + Add Holiday
+              </button>
+            </div>
+            {sorted.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-light-grey">No holiday hours set.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {sorted.map(([dateKey, entry]) => {
+                  const isPast = dateKey < today;
+                  const dateLabel = new Date(dateKey + "T00:00:00").toLocaleDateString("en-US", {
+                    weekday: "short", year: "numeric", month: "short", day: "numeric",
+                  });
+                  return (
+                    <div key={dateKey} className={`flex items-center justify-between px-4 py-3 ${isPast ? "opacity-40" : ""}`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-black">{dateLabel}</span>
+                          {isPast && <span className="rounded-full bg-soft-grey px-2 py-0.5 text-[10px] text-light-grey">Past</span>}
+                        </div>
+                        {entry.title && <p className="text-xs text-light-grey">{entry.title}{entry.description ? ` — ${entry.description}` : ""}</p>}
+                      </div>
+                      <div className="ml-4 flex items-center gap-3">
+                        {entry.isOpen ? (
+                          <span className="text-sm text-black">{entry.open} – {entry.close}</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
+                            <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+                            Closed
+                          </span>
+                        )}
+                        <button
+                          onClick={() => openEditHoliday(dateKey, entry)}
+                          className="text-xs text-light-grey hover:text-primary"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => openDeleteHoliday(dateKey)}
+                          className="text-xs text-light-grey hover:text-error"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Dialogs */}
+      {dialog && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={closeEdit}
+          onClick={closeDialog}
         >
           <div
             className="w-full max-w-lg rounded-2xl bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
+
+          {/* ── Edit Store ── */}
+          {dialog === "edit-store" && form && (<>
             <div className="border-b border-border px-6 py-4">
               <h3 className="text-lg font-semibold text-black">Edit Store</h3>
             </div>
@@ -406,7 +583,7 @@ export default function StoreDetailPage() {
 
             <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
               <button
-                onClick={closeEdit}
+                onClick={closeDialog}
                 className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
               >
                 Cancel
@@ -419,6 +596,134 @@ export default function StoreDetailPage() {
                 {loading ? "Saving…" : "Save Changes"}
               </button>
             </div>
+          </>)}
+
+          {/* ── Add / Edit Holiday ── */}
+          {(dialog === "add-holiday" || dialog === "edit-holiday") && (
+            <>
+              <div className="border-b border-border px-6 py-4">
+                <h3 className="text-lg font-semibold text-black">
+                  {dialog === "add-holiday" ? "Add Holiday" : "Edit Holiday"}
+                </h3>
+              </div>
+              <div className="px-6 py-4 space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-xs text-light-grey">Date *</label>
+                  <input
+                    type="date"
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${holidayErrors.date ? "border-error" : "border-border"}`}
+                    value={holidayForm.date}
+                    onChange={(e) => { setHolidayForm((f) => ({ ...f, date: e.target.value })); setHolidayErrors({}); }}
+                  />
+                  {holidayErrors.date && <p className="mt-1 text-xs text-error">Date is required.</p>}
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs text-light-grey">Title</label>
+                  <input
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                    placeholder="e.g. Good Friday"
+                    value={holidayForm.title}
+                    onChange={(e) => setHolidayForm((f) => ({ ...f, title: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs text-light-grey">Description</label>
+                  <input
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                    placeholder="e.g. Reduced hours for public holiday"
+                    value={holidayForm.description}
+                    onChange={(e) => setHolidayForm((f) => ({ ...f, description: e.target.value }))}
+                  />
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-black">
+                  <input
+                    type="checkbox"
+                    checked={!holidayForm.isOpen}
+                    onChange={(e) => setHolidayForm((f) => ({ ...f, isOpen: !e.target.checked }))}
+                    className="accent-primary"
+                  />
+                  Closed all day
+                </label>
+                {holidayForm.isOpen && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="mb-1.5 block text-xs text-light-grey">Open</label>
+                      <input
+                        type="time"
+                        value={holidayForm.open}
+                        onChange={(e) => setHolidayForm((f) => ({ ...f, open: e.target.value }))}
+                        className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                      />
+                    </div>
+                    <span className="mt-5 text-xs text-light-grey">to</span>
+                    <div className="flex-1">
+                      <label className="mb-1.5 block text-xs text-light-grey">Close</label>
+                      <input
+                        type="time"
+                        value={holidayForm.close}
+                        onChange={(e) => setHolidayForm((f) => ({ ...f, close: e.target.value }))}
+                        className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
+                <button
+                  onClick={closeDialog}
+                  className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveHoliday}
+                  disabled={loading}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+                >
+                  {loading ? "Saving…" : dialog === "add-holiday" ? "Add Holiday" : "Save Changes"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── Delete Holiday ── */}
+          {dialog === "delete-holiday" && editingDate && (
+            <>
+              <div className="border-b border-border px-6 py-4">
+                <h3 className="text-lg font-semibold text-black">Remove Holiday</h3>
+              </div>
+              <div className="px-6 py-4">
+                <p className="text-sm text-black">
+                  Remove the holiday entry for{" "}
+                  <span className="font-medium">
+                    {new Date(editingDate + "T00:00:00").toLocaleDateString("en-US", {
+                      weekday: "short", year: "numeric", month: "short", day: "numeric",
+                    })}
+                  </span>
+                  {store.holidayHours?.[editingDate]?.title && (
+                    <> ({store.holidayHours[editingDate].title})</>
+                  )}
+                  ?
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
+                <button
+                  onClick={closeDialog}
+                  className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteHoliday}
+                  disabled={loading}
+                  className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+                >
+                  {loading ? "Removing…" : "Remove"}
+                </button>
+              </div>
+            </>
+          )}
+
           </div>
         </div>
       )}

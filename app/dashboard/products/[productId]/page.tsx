@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { useStoreStore } from "../../stores/store/useStoreStore";
+import { useStaffStore } from "../../staffs/store/useStaffStore";
+import { useAuth } from "@/app/lib/AuthContext";
 import { Product } from "../interface/product";
 import { Modifier } from "../interface/modifier";
 import { ProductService } from "../service/ProductService";
@@ -17,6 +20,11 @@ export default function ProductDetailPage() {
     const { productId } = useParams<{ productId: string }>();
     const router = useRouter();
 
+    const { user } = useAuth();
+    const staffs = useStaffStore((s) => s.staffs);
+    const currentStaff = staffs.find((s) => s.docId === user?.uid);
+    const isAdmin = currentStaff?.role === "admin";
+
     const products = useDashboardStore((s) => s.products);
     const modifiers = useDashboardStore((s) => s.modifiers);
     const modifierGroups = useDashboardStore((s) => s.modifierGroups);
@@ -28,6 +36,7 @@ export default function ProductDetailPage() {
     const [modifierForm, setModifierForm] = useState<Omit<Modifier, "docId">>(emptyModifier);
     const [activeModifierId, setActiveModifierId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [statusLoading, setStatusLoading] = useState(false);
 
     const product = products.find((p) => p.docId === productId);
 
@@ -37,6 +46,65 @@ export default function ProductDetailPage() {
 
     const getModifiersForGroup = (group: typeof modifierGroups[0]) =>
         modifiers.filter((m) => group.modifierIds?.includes(m.docId ?? ""));
+
+    // ── Status helpers ──────────────────────────────────────────────────────────
+
+    // Permanent disable: admin only, applies globally
+    const isPermanentlyDisabled = product?.disabledPermanently ?? false;
+
+    // Temporary disable per store: store_manager can toggle for their assigned stores
+    // Admin sees all; store_manager sees only their assigned stores
+    const assignedStoreIds = isAdmin
+        ? (product?.availableToStores ?? [])
+        : (currentStaff?.storeIds ?? []).filter((id) =>
+              product?.availableToStores?.includes(id),
+          );
+
+    const disabledStores = product?.disabledStores ?? [];
+
+    async function handleTogglePermanent() {
+        if (!product?.docId) return;
+        setStatusLoading(true);
+        try {
+            await ProductService.updateProduct(product.docId, {
+                disabledPermanently: !isPermanentlyDisabled,
+            });
+            toast.success(
+                isPermanentlyDisabled
+                    ? "Product re-enabled permanently."
+                    : "Product permanently disabled.",
+            );
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to update status.");
+        } finally {
+            setStatusLoading(false);
+        }
+    }
+
+    async function handleToggleStoreDisable(storeId: string) {
+        if (!product?.docId) return;
+        setStatusLoading(true);
+        try {
+            const isCurrentlyDisabled = disabledStores.includes(storeId);
+            const updated = isCurrentlyDisabled
+                ? disabledStores.filter((id) => id !== storeId)
+                : [...disabledStores, storeId];
+            await ProductService.updateProduct(product.docId, { disabledStores: updated });
+            toast.success(
+                isCurrentlyDisabled
+                    ? "Product re-enabled for this store."
+                    : "Product temporarily disabled for this store.",
+            );
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to update status.");
+        } finally {
+            setStatusLoading(false);
+        }
+    }
+
+    // ── Other handlers ──────────────────────────────────────────────────────────
 
     function openEditProduct() {
         setProductForm(product ?? {});
@@ -135,7 +203,7 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                {/* Product Info */}
+                {/* Left column: product info + status controls */}
                 <div className="lg:col-span-1 space-y-4">
                     <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
                         {product.imageUrl ? (
@@ -168,7 +236,7 @@ export default function ProductDetailPage() {
 
                     {product.availableToStores && product.availableToStores.length > 0 && (
                         <div className="rounded-xl border border-border bg-white p-4 shadow-(--shadow)">
-                            <p className="mb-2 text-xs font-medium text-light-grey uppercase tracking-wide">Available to Stores</p>
+                            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-light-grey">Available to Stores</p>
                             <div className="flex flex-wrap gap-1.5">
                                 {product.availableToStores.map((storeId) => {
                                     const store = stores.find((s) => s.docId === storeId);
@@ -181,9 +249,77 @@ export default function ProductDetailPage() {
                             </div>
                         </div>
                     )}
+
+                    {/* ── Status Controls ── */}
+                    <div className="rounded-xl border border-border bg-white p-4 shadow-(--shadow) space-y-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-light-grey">Availability</p>
+
+                        {/* Permanent disable — admin only */}
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-medium text-black">Permanently Disabled</p>
+                                <p className="mt-0.5 text-xs text-light-grey">
+                                    Removes this product from all stores. Admin only.
+                                </p>
+                            </div>
+                            {isAdmin ? (
+                                <button
+                                    onClick={handleTogglePermanent}
+                                    disabled={statusLoading}
+                                    className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50 ${
+                                        isPermanentlyDisabled
+                                            ? "bg-success text-white"
+                                            : "bg-error text-white"
+                                    }`}
+                                >
+                                    {isPermanentlyDisabled ? "Re-enable" : "Disable"}
+                                </button>
+                            ) : (
+                                <span className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                                    isPermanentlyDisabled
+                                        ? "bg-red-50 text-error"
+                                        : "bg-green-50 text-success"
+                                }`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${isPermanentlyDisabled ? "bg-error" : "bg-success"}`} />
+                                    {isPermanentlyDisabled ? "Disabled" : "Active"}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Per-store temporary disable — store_manager (or admin) */}
+                        {assignedStoreIds.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-xs text-light-grey">
+                                    Temporarily disable per store (e.g. out of stock):
+                                </p>
+                                <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                                    {assignedStoreIds.map((storeId) => {
+                                        const store = stores.find((s) => s.docId === storeId);
+                                        const isDisabled = disabledStores.includes(storeId);
+                                        return (
+                                            <div key={storeId} className="flex items-center justify-between px-3 py-2.5">
+                                                <span className="text-sm text-black">{store?.name ?? storeId}</span>
+                                                <button
+                                                    onClick={() => handleToggleStoreDisable(storeId)}
+                                                    disabled={statusLoading || isPermanentlyDisabled}
+                                                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 ${
+                                                        isDisabled
+                                                            ? "bg-amber-100 text-amber-700"
+                                                            : "bg-green-50 text-success"
+                                                    }`}
+                                                >
+                                                    {isDisabled ? "Disabled — tap to re-enable" : "Enabled — tap to disable"}
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Modifier Groups */}
+                {/* Right column: modifier groups */}
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="font-semibold text-black">Modifier Groups</h2>

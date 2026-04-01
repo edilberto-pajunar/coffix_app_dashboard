@@ -8,4 +8,6 @@ export interface Product {
   name?: string;
   order?: number;
   price?: number;
+  disabledPermanently?: boolean;
+  disabledStores?: string[];
 }
