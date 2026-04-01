@@ -506,6 +506,7 @@ export default function ProductsPage() {
                       </td>
                     </tr>
                   ))}
+                  
                 </tbody>
               </table>
             )}

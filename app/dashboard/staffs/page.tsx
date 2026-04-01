@@ -36,7 +36,7 @@ function validateForm(form: StaffForm): StaffFormErrors {
   return {
     email: !form.email.trim() || !EMAIL_RE.test(form.email.trim()),
     role: !form.role,
-    storeIds: form.role === "store_manager" && form.storeIds.length === 0,
+    storeIds: (form.role === "store_manager" || form.role === "admin") && form.storeIds.length === 0,
   };
 }
 
@@ -65,6 +65,8 @@ type StaffDialogProps = {
   onChangeRole: (v: StaffRole | "") => void;
   onToggleStore: (storeId: string) => void;
   onChangeDisabled: (v: boolean) => void;
+  onSelectAll: () => void;
+  onUnselectAll: () => void;
 };
 
 function StaffDialog({
@@ -80,6 +82,8 @@ function StaffDialog({
   onChangeRole,
   onToggleStore,
   onChangeDisabled,
+  onSelectAll,
+  onUnselectAll,
 }: StaffDialogProps) {
   return (
     <div
@@ -131,12 +135,31 @@ function StaffDialog({
             )}
           </div>
 
-          {/* Assigned Stores — only for store_manager */}
-          {form.role === "store_manager" && (
+          {/* Assigned Stores — for store_manager and admin */}
+          {(form.role === "store_manager" || form.role === "admin") && (
             <div>
-              <label className="mb-1.5 block text-xs text-light-grey">
-                Assigned Stores *
-              </label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="text-xs text-light-grey">Assigned Stores *</label>
+                {stores.length > 0 && (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={onSelectAll}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Select all
+                    </button>
+                    <span className="text-xs text-light-grey">·</span>
+                    <button
+                      type="button"
+                      onClick={onUnselectAll}
+                      className="text-xs text-light-grey hover:underline"
+                    >
+                      Unselect all
+                    </button>
+                  </div>
+                )}
+              </div>
               <div
                 className={`overflow-hidden rounded-lg border divide-y divide-border ${
                   errors.storeIds ? "border-error" : "border-border"
@@ -256,7 +279,7 @@ export default function StaffsPage() {
       await StaffService.createStaff({
         email: createForm.email.trim(),
         role: createForm.role as StaffRole,
-        storeIds: createForm.role === "store_manager" ? createForm.storeIds : [],
+        storeIds: createForm.storeIds,
         disabled: false,
       });
       toast.success("Staff member created.");
@@ -300,7 +323,7 @@ export default function StaffsPage() {
       await StaffService.updateStaff(editTarget.docId, {
         email: editForm.email.trim(),
         role: editForm.role as StaffRole,
-        storeIds: editForm.role === "store_manager" ? editForm.storeIds : [],
+        storeIds: editForm.storeIds,
         disabled: editForm.disabled,
       });
       toast.success("Staff member updated.");
@@ -388,11 +411,7 @@ export default function StaffsPage() {
                   </td>
 
                   <td className="px-5 py-3 text-black">
-                    {staff.role === "store_manager" ? (
-                      storeNames(staff.storeIds)
-                    ) : (
-                      <span className="text-light-grey">—</span>
-                    )}
+                    {storeNames(staff.storeIds)}
                   </td>
 
                   <td className="px-5 py-3">
@@ -455,6 +474,13 @@ export default function StaffsPage() {
             setCreateForm((f) => ({ ...f, storeIds: toggleStoreId(f.storeIds, id) }));
             setCreateErrors((e) => ({ ...e, storeIds: false }));
           }}
+          onSelectAll={() => {
+            setCreateForm((f) => ({ ...f, storeIds: stores.map((s) => s.docId) }));
+            setCreateErrors((e) => ({ ...e, storeIds: false }));
+          }}
+          onUnselectAll={() => {
+            setCreateForm((f) => ({ ...f, storeIds: [] }));
+          }}
           onChangeDisabled={() => {}}
         />
       )}
@@ -481,6 +507,13 @@ export default function StaffsPage() {
           onToggleStore={(id) => {
             setEditForm((f) => ({ ...f, storeIds: toggleStoreId(f.storeIds, id) }));
             setEditErrors((e) => ({ ...e, storeIds: false }));
+          }}
+          onSelectAll={() => {
+            setEditForm((f) => ({ ...f, storeIds: stores.map((s) => s.docId) }));
+            setEditErrors((e) => ({ ...e, storeIds: false }));
+          }}
+          onUnselectAll={() => {
+            setEditForm((f) => ({ ...f, storeIds: [] }));
           }}
           onChangeDisabled={(v) => {
             setEditForm((f) => ({ ...f, disabled: v }));
