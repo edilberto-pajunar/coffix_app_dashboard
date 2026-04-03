@@ -12,6 +12,9 @@ import {
   UserCheck,
   X,
   Menu,
+  Settings,
+  Bell,
+  Mail,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
@@ -24,6 +27,9 @@ const navItems = [
   { href: "/dashboard/modifierGroups", label: "Modifier Groups", icon: Layers },
   { href: "/dashboard/users", label: "Users", icon: Users },
   { href: "/dashboard/staffs", label: "Staffs", icon: UserCheck },
+  { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
+  { href: "/dashboard/globalSettings", label: "Global Settings", icon: Settings },
+  { href: "/dashboard/emailTemplates", label: "Email Templates", icon: Mail },
 ];
 
 export function Sidebar() {
@@ -74,7 +80,7 @@ export function Sidebar() {
   );
 }
 
-export function FloatingNav() {
+export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -85,60 +91,79 @@ export function FloatingNav() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 md:hidden">
+    <>
+      {/* FAB trigger */}
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed top-4 left-4 z-40 flex h-10 w-10 items-center justify-center rounded-full shadow-xl transition-all active:scale-95 md:hidden"
+        style={{ backgroundColor: "var(--color-primary, #6f4e37)" }}
+        aria-label="Open navigation"
+      >
+        <Menu size={22} className="text-white" />
+      </button>
+
+      {/* Backdrop */}
       {open && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
-          />
-          <div className="relative z-10 flex flex-col items-end gap-2">
-            {navItems.map(({ href, label, icon: Icon }) => {
-              const isActive =
-                href === "/dashboard"
-                  ? pathname === "/dashboard"
-                  : pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setOpen(false)}
-                  className="flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-lg transition-all"
-                  style={{
-                    backgroundColor: isActive
-                      ? "var(--color-primary, #6f4e37)"
-                      : "white",
-                    color: isActive ? "white" : "#1a1a1a",
-                  }}
-                >
-                  <Icon size={16} />
-                  {label}
-                </Link>
-              );
-            })}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-red-500 shadow-lg transition-all hover:bg-red-50"
-            >
-              <LogOut size={16} />
-              Logout
-            </button>
-          </div>
-        </>
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm md:hidden"
+          onClick={() => setOpen(false)}
+        />
       )}
 
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition-all active:scale-95"
-        style={{ backgroundColor: "var(--color-primary, #6f4e37)" }}
-        aria-label="Navigation menu"
+      {/* Drawer */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out md:hidden ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        {open ? (
-          <X size={22} className="text-white" />
-        ) : (
-          <Menu size={22} className="text-white" />
-        )}
-      </button>
-    </div>
+        <div className="flex h-14 items-center justify-between border-b border-border px-4">
+          <Link
+            href="/dashboard"
+            onClick={() => setOpen(false)}
+            className="font-semibold text-primary"
+          >
+            Coffix
+          </Link>
+          <button
+            onClick={() => setOpen(false)}
+            className="rounded-lg p-1.5 text-black transition-colors hover:bg-soft-grey"
+            aria-label="Close navigation"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <nav className="flex flex-col gap-0.5 p-3">
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const isActive =
+              href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                data-active={isActive}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey data-[active=true]:bg-primary data-[active=true]:text-white"
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="mt-auto border-t border-border p-3">
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
+          >
+            <LogOut size={15} />
+            Logout
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

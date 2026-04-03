@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sidebar } from "../components/Sidebar";
+import { Sidebar, MobileNav } from "../components/Sidebar";
 import { DataInitializer } from "../components/DataInitializer";
 import { useAuth } from "@/app/lib/AuthContext";
 
@@ -32,9 +32,10 @@ export default function DashboardLayout({
     <div className="flex min-h-screen">
       <DataInitializer />
       <Sidebar />
-      <main className="flex-1 overflow-auto bg-background p-6">
+      <main className="flex-1 overflow-auto bg-background p-6 pt-16 md:pt-6">
         {children}
       </main>
+      <MobileNav />
     </div>
   );
 }
