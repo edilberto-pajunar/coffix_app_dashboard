@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       docId: userRecord.uid,
       email,
       role,
-      storeIds: role === "store_manager" ? (storeIds ?? []) : [],
+      storeIds: storeIds ?? [],
       disabled: false,
       createdAt: FieldValue.serverTimestamp(),
     });

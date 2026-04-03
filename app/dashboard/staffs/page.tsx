@@ -36,7 +36,7 @@ function validateForm(form: StaffForm): StaffFormErrors {
   return {
     email: !form.email.trim() || !EMAIL_RE.test(form.email.trim()),
     role: !form.role,
-    storeIds: (form.role === "store_manager" || form.role === "admin") && form.storeIds.length === 0,
+    storeIds: form.role === "store_manager" && form.storeIds.length === 0,
   };
 }
 
@@ -279,7 +279,9 @@ export default function StaffsPage() {
       await StaffService.createStaff({
         email: createForm.email.trim(),
         role: createForm.role as StaffRole,
-        storeIds: createForm.storeIds,
+        storeIds: createForm.role === "admin"
+          ? stores.map((s) => s.docId)
+          : createForm.storeIds,
         disabled: false,
       });
       toast.success("Staff member created.");
