@@ -136,7 +136,7 @@ function StaffDialog({
           </div>
 
           {/* Assigned Stores — for store_manager and admin */}
-          {(form.role === "store_manager" || form.role === "admin") && (
+          {(form.role === "store_manager" ) && (
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <label className="text-xs text-light-grey">Assigned Stores *</label>
