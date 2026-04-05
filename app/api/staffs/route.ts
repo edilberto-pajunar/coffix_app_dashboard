@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/app/lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
+import admin from "firebase-admin";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +13,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    console.log(
+      "admin sdk",
+      process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    );
 
     // 1. Create the Firebase Auth user
     const userRecord = await adminAuth.createUser({ email });
