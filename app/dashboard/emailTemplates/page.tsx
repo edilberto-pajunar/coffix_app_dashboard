@@ -9,76 +9,12 @@ import { useAuth } from "@/app/lib/AuthContext";
 import { formatDocId } from "@/app/utils/formatting";
 import { renderEmailTemplate } from "@/app/lib/renderEmailTemplate";
 
-// ─── Variable Token Registry ──────────────────────────────────────────────────
-
-type TokenDef = {
-  token: string;       // e.g. "firstName"
-  label: string;       // displayed on chip
-  description: string;
-  category: "Standard" | "Gift" | "Welcome" | "Top-Up" | "Birthday" | "Notification";
-  required?: boolean;
-};
-
-const TOKEN_REGISTRY: TokenDef[] = [
-  // Standard — always available
-  { token: "firstName",    label: "First Name",     description: "Recipient's first name",         category: "Standard", required: true },
-  { token: "lastName",     label: "Last Name",      description: "Recipient's last name",           category: "Standard" },
-  { token: "email",        label: "Email",          description: "Recipient's email address",       category: "Standard" },
-  { token: "credits",      label: "Credits",        description: "Current credit balance",          category: "Standard" },
-  { token: "storeName",    label: "Store Name",     description: "Customer's preferred store",      category: "Standard" },
-  { token: "appUrl",       label: "App URL",        description: "Deep-link / app download URL",    category: "Standard" },
-  { token: "currentYear",  label: "Current Year",   description: "4-digit year (for footers)",      category: "Standard" },
-  // Gift Email
-  { token: "amount",       label: "Amount",         description: "Gift credit amount",              category: "Gift" },
-  { token: "newBalance",   label: "New Balance",    description: "Balance after gift/top-up",       category: "Gift" },
-  // Welcome Email
-  { token: "verifyUrl",    label: "Verify URL",     description: "Email verification link",         category: "Welcome" },
-  // Top-Up Email
-  { token: "topUpAmount",  label: "Top-Up Amount",  description: "Amount added in top-up",          category: "Top-Up" },
-  // Birthday Email
-  { token: "birthdayMonth",label: "Birthday Month", description: "Recipient's birthday month",      category: "Birthday" },
-  { token: "promoCode",    label: "Promo Code",     description: "Birthday promo code",             category: "Birthday" },
-  // Notification Email
-  { token: "subject",      label: "Subject",        description: "Notification subject line",       category: "Notification" },
-  { token: "body",         label: "Body",           description: "Free-form notification content",  category: "Notification" },
-];
-
-const KNOWN_TOKENS = new Set(TOKEN_REGISTRY.map((t) => t.token));
-
-const CATEGORY_ORDER: TokenDef["category"][] = [
-  "Standard", "Gift", "Welcome", "Top-Up", "Birthday", "Notification",
-];
-
-const CATEGORY_COLORS: Record<TokenDef["category"], string> = {
-  Standard:     "bg-primary/10 text-primary border-primary/20",
-  Gift:         "bg-amber-50 text-amber-700 border-amber-200",
-  Welcome:      "bg-green-50 text-green-700 border-green-200",
-  "Top-Up":     "bg-blue-50 text-blue-700 border-blue-200",
-  Birthday:     "bg-pink-50 text-pink-700 border-pink-200",
-  Notification: "bg-purple-50 text-purple-700 border-purple-200",
-};
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const PREVIEW_VARIABLES: Record<string, string | number> = {
-  firstName: "Jane", lastName: "Doe", email: "jane@example.com",
-  credits: 150, storeName: "Coffix Main", appUrl: "https://app.coffix.com",
-  currentYear: new Date().getFullYear(),
-  amount: 50, newBalance: 200,
-  verifyUrl: "https://app.coffix.com/verify?token=abc",
-  topUpAmount: 100, birthdayMonth: "April", promoCode: "BDAY20",
-  subject: "A message from Coffix", body: "This is a preview notification body.",
-};
 
 /** Extract all {{ token }} names from a string. */
 function extractTokens(content: string): string[] {
   const matches = content.matchAll(/{{\s*(\w+)\s*}}/g);
   return [...new Set([...matches].map((m) => m[1]))];
-}
-
-/** Returns token names that are in content but not in the registry. */
-function unknownTokens(content: string): string[] {
-  return extractTokens(content).filter((t) => !KNOWN_TOKENS.has(t));
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -92,20 +28,19 @@ function validateForm(form: TemplateForm): TemplateFormErrors {
 }
 function hasErrors(e: TemplateFormErrors) { return Object.values(e).some(Boolean); }
 
-// ─── Token Chip Toolbar ───────────────────────────────────────────────────────
+// ─── Variable Chips ───────────────────────────────────────────────────────────
 
-type TokenToolbarProps = {
+type VariableChipsProps = {
+  variables: string[];
   content: string;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   onInsert: (newContent: string) => void;
 };
 
-function TokenToolbar({ content, textareaRef, onInsert }: TokenToolbarProps) {
-  const [activeCategory, setActiveCategory] = useState<TokenDef["category"]>("Standard");
-
-  function insertToken(tokenDef: TokenDef) {
+function VariableChips({ variables, content, textareaRef, onInsert }: VariableChipsProps) {
+  function insertVariable(varName: string) {
     const el = textareaRef.current;
-    const insertion = `{{ ${tokenDef.token} }}`;
+    const insertion = `{{ ${varName} }}`;
     if (!el) {
       onInsert(content + insertion);
       return;
@@ -114,7 +49,6 @@ function TokenToolbar({ content, textareaRef, onInsert }: TokenToolbarProps) {
     const end = el.selectionEnd ?? content.length;
     const next = content.slice(0, start) + insertion + content.slice(end);
     onInsert(next);
-    // Restore cursor after the inserted text
     requestAnimationFrame(() => {
       el.focus();
       const pos = start + insertion.length;
@@ -123,80 +57,38 @@ function TokenToolbar({ content, textareaRef, onInsert }: TokenToolbarProps) {
   }
 
   const usedTokens = new Set(extractTokens(content));
-  const filteredTokens = TOKEN_REGISTRY.filter((t) => t.category === activeCategory);
 
   return (
     <div className="rounded-lg border border-border bg-background overflow-hidden">
-      {/* Category tabs */}
-      <div className="flex gap-0 border-b border-border overflow-x-auto">
-        {CATEGORY_ORDER.map((cat) => (
-          <button
-            key={cat}
-            type="button"
-            onClick={() => setActiveCategory(cat)}
-            className={`whitespace-nowrap px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
-              activeCategory === cat
-                ? "border-primary text-primary bg-white"
-                : "border-transparent text-light-grey hover:text-black"
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Token chips */}
       <div className="flex flex-wrap gap-1.5 p-3">
-        {filteredTokens.map((def) => {
-          const used = usedTokens.has(def.token);
-          return (
-            <button
-              key={def.token}
-              type="button"
-              title={def.description}
-              onClick={() => insertToken(def)}
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-70 ${
-                CATEGORY_COLORS[def.category]
-              } ${used ? "opacity-60" : ""}`}
-            >
-              {def.required && (
-                <span className="text-[10px] font-bold">*</span>
-              )}
-              {`{{ ${def.token} }}`}
-              {used && (
-                <span className="ml-0.5 text-[10px] opacity-70">✓</span>
-              )}
-            </button>
-          );
-        })}
+        {variables.length === 0 ? (
+          <p className="text-xs text-light-grey">
+            No variables defined for this template. A developer can add them directly in Firestore.
+          </p>
+        ) : (
+          variables.map((varName) => {
+            const used = usedTokens.has(varName);
+            return (
+              <button
+                key={varName}
+                type="button"
+                title={`Insert {{ ${varName} }}`}
+                onClick={() => insertVariable(varName)}
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-70 bg-primary/10 text-primary border-primary/20 ${used ? "opacity-60" : ""}`}
+              >
+                {`{{ ${varName} }}`}
+                {used && <span className="ml-0.5 text-[10px] opacity-70">✓</span>}
+              </button>
+            );
+          })
+        )}
       </div>
-
-      <p className="border-t border-border px-3 py-1.5 text-[11px] text-light-grey">
-        Click a token to insert it at the cursor. <span className="font-mono">*</span> = required.{" "}
-        <span className="opacity-60">✓</span> = already used.
-      </p>
-    </div>
-  );
-}
-
-// ─── Token Validation Warning ─────────────────────────────────────────────────
-
-function TokenValidation({ content }: { content: string }) {
-  const unknown = unknownTokens(content);
-  if (unknown.length === 0) return null;
-  return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-      <p className="text-xs font-medium text-amber-700">Unrecognized tokens detected</p>
-      <p className="mt-0.5 text-xs text-amber-600">
-        The following tokens are not in the standard registry and may not be replaced at send
-        time:{" "}
-        {unknown.map((t, i) => (
-          <span key={t}>
-            <span className="font-mono">{`{{ ${t} }}`}</span>
-            {i < unknown.length - 1 ? ", " : ""}
-          </span>
-        ))}
-      </p>
+      {variables.length > 0 && (
+        <p className="border-t border-border px-3 py-1.5 text-[11px] text-light-grey">
+          Click a variable to insert it at the cursor.{" "}
+          <span className="opacity-60">✓</span> = already used.
+        </p>
+      )}
     </div>
   );
 }
@@ -209,6 +101,7 @@ type TemplateDialogProps = {
   errors: TemplateFormErrors;
   loading: boolean;
   isEdit: boolean;
+  variables: string[];
   onClose: () => void;
   onSubmit: () => void;
   onChangeName: (v: string) => void;
@@ -217,7 +110,7 @@ type TemplateDialogProps = {
 };
 
 function TemplateDialog({
-  title, form, errors, loading, isEdit,
+  title, form, errors, loading, isEdit, variables,
   onClose, onSubmit, onChangeName, onChangeContent, onChangeNotes,
 }: TemplateDialogProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -266,8 +159,9 @@ function TemplateDialog({
           <div className="space-y-2">
             <label className="block text-xs text-light-grey">Content (HTML) *</label>
 
-            {/* Token toolbar */}
-            <TokenToolbar
+            {/* Variable chips */}
+            <VariableChips
+              variables={variables}
               content={form.content}
               textareaRef={textareaRef}
               onInsert={onChangeContent}
@@ -283,9 +177,6 @@ function TemplateDialog({
                 errors.content ? "border-error" : "border-border"
               }`}
             />
-
-            {/* Unknown token warning */}
-            <TokenValidation content={form.content} />
 
             {errors.content && (
               <p className="text-xs text-error">Content is required.</p>
@@ -459,7 +350,10 @@ export default function EmailTemplatesPage() {
 
   // ── Preview
   function openPreview(template: EmailTemplate) {
-    setPreviewHtml(renderEmailTemplate(template.content, PREVIEW_VARIABLES));
+    const sampleVars = Object.fromEntries(
+      (template.variables ?? []).map((v) => [v, `[${v}]`])
+    );
+    setPreviewHtml(renderEmailTemplate(template.content, sampleVars));
   }
 
   return (
@@ -487,6 +381,7 @@ export default function EmailTemplatesPage() {
             <tr className="border-b border-border bg-background">
               <th className="px-5 py-3 text-left font-medium text-light-grey">Name</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Doc ID</th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Variables</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Notes</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Last Updated</th>
               <th className="px-5 py-3 text-right font-medium text-light-grey">Actions</th>
@@ -495,7 +390,7 @@ export default function EmailTemplatesPage() {
           <tbody className="divide-y divide-border">
             {templates.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
                   No email templates found.
                 </td>
               </tr>
@@ -504,6 +399,22 @@ export default function EmailTemplatesPage() {
                 <tr key={template.docId} className="transition-colors hover:bg-background">
                   <td className="px-5 py-3 font-medium text-black">{template.name}</td>
                   <td className="px-5 py-3 font-mono text-xs text-light-grey">{template.docId}</td>
+                  <td className="px-5 py-3">
+                    {template.variables && template.variables.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {template.variables.map((v) => (
+                          <span
+                            key={v}
+                            className="inline-block rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
+                          >
+                            {`{{ ${v} }}`}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-light-grey">—</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-black">
                     {template.notes
                       ? template.notes.length > 60
@@ -551,6 +462,7 @@ export default function EmailTemplatesPage() {
           errors={createErrors}
           loading={createLoading}
           isEdit={false}
+          variables={[]}
           onClose={closeCreate}
           onSubmit={handleCreate}
           onChangeName={(v) => { setCreateForm((f) => ({ ...f, name: v })); setCreateErrors((e) => ({ ...e, name: false })); }}
@@ -567,6 +479,7 @@ export default function EmailTemplatesPage() {
           errors={editErrors}
           loading={editLoading}
           isEdit={true}
+          variables={editTarget.variables ?? []}
           onClose={closeEdit}
           onSubmit={handleUpdate}
           onChangeName={() => {}}

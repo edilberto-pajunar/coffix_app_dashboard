@@ -54,6 +54,7 @@ interface EmailTemplate {
   docId: string;           // auto-generated or slug, e.g. "welcome-email"
   name: string;            // human label, e.g. "Welcome Email", "Gift Email"
   content: string;         // raw HTML (or plain text) with {{ variable }} tokens
+  variables?: string[];    // list of variable names used in this template, e.g. ["firstName", "amount"]
   notes?: string;          // internal notes — promotion details, usage context, etc.
   updatedAt?: Timestamp;   // set on every save for audit trail
   updatedBy?: string;      // staff uid who last saved
@@ -67,6 +68,7 @@ interface EmailTemplate {
   "docId": "gift-email",
   "name": "Gift Email",
   "notes": "Sent when a staff member issues a manual credit gift to a customer.",
+  "variables": ["firstName", "amount", "newBalance"],
   "content": "<p>Hi {{ firstName }},</p><p>You've received a gift of <strong>${{ amount }}</strong> in Coffix credits. Enjoy your next coffee on us!</p><p>Your new balance is <strong>${{ newBalance }}</strong>.</p>",
   "updatedAt": "2026-04-01T00:00:00Z",
   "updatedBy": "uid_admin_001"
@@ -148,6 +150,7 @@ Unresolved tokens are left as-is (not silently removed) so missing data is visib
 
 - **Name** — text input.
 - **Notes** — multi-line text area for internal context.
+- **Variables** — list of variable name tags (strings) declared for this template. Each tag is clickable — clicking it appends `{{ variableName }}` at the current cursor position in the content editor. Editors can also add/remove variable tags directly in this field.
 - **Content** — full HTML editor (WYSIWYG toggle ↔ raw HTML). Toolbar includes Insert Variable dropdown populated from the standard token list.
 - **Preview** button — renders the template inside the global shell with sample data so editors see exactly what recipients receive.
 - **Save** — writes back to Firestore, stamping `updatedAt` and `updatedBy`.
