@@ -14,11 +14,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(
-      "admin sdk",
-      process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    );
-
     // 1. Create the Firebase Auth user
     const userRecord = await adminAuth.createUser({ email });
 
