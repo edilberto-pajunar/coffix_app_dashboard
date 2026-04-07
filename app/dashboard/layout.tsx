@@ -29,7 +29,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <DataInitializer />
       <Sidebar />
       <main className="flex-1 overflow-auto bg-background p-6 pt-16 md:pt-6">

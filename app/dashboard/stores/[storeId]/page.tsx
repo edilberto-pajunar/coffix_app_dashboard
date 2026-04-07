@@ -14,7 +14,6 @@ type Day = typeof DAYS[number];
 type DayHoursForm = { isOpen: boolean; open: string; close: string };
 type StoreEditForm = {
   name: string;
-  storeCode: string;
   email: string;
   contactNumber: string;
   location: string;
@@ -27,7 +26,7 @@ type StoreEditForm = {
 };
 
 const REQUIRED: (keyof Omit<StoreEditForm, "openingHours">)[] = [
-  "name", "storeCode", "email", "contactNumber", "location", "address",
+  "name", "email", "contactNumber", "location", "address",
 ];
 
 type DialogMode = "edit-store" | "add-holiday" | "edit-holiday" | "delete-holiday" | null;
@@ -60,7 +59,6 @@ function storeToForm(store: Store): StoreEditForm {
 
   return {
     name: store.name ?? "",
-    storeCode: store.storeCode ?? "",
     email: store.email ?? "",
     contactNumber: store.contactNumber ?? "",
     location: store.location ?? "",
@@ -221,7 +219,6 @@ export default function StoreDetailPage() {
     try {
       await StoreService.updateStore(store.docId, {
         name: form.name.trim(),
-        storeCode: form.storeCode.trim(),
         email: form.email.trim(),
         contactNumber: form.contactNumber.trim(),
         location: form.location.trim(),
@@ -267,8 +264,8 @@ export default function StoreDetailPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold text-black">{store.name ?? "—"}</h1>
             {isDisabled ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-disabled-bg px-2.5 py-1 text-xs font-medium text-light-grey">
-                <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
                 Disabled
               </span>
             ) : isOpen ? (
@@ -277,13 +274,12 @@ export default function StoreDetailPage() {
                 Open Now
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
-                <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
                 Closed
               </span>
             )}
           </div>
-          <p className="mt-1 font-mono text-sm text-light-grey">{store.storeCode ?? "—"}</p>
         </div>
         <button
           onClick={openEdit}
@@ -305,7 +301,7 @@ export default function StoreDetailPage() {
               className="h-44 w-full object-cover"
             />
           ) : (
-            <div className="flex h-44 items-center justify-center bg-soft-grey text-5xl font-bold text-light-grey">
+            <div className="flex h-44 items-center justify-center bg-primary text-5xl font-bold text-white">
               {(store.name ?? "?")[0].toUpperCase()}
             </div>
           )}
@@ -386,7 +382,7 @@ export default function StoreDetailPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-black">{dateLabel}</span>
-                          {isPast && <span className="rounded-full bg-soft-grey px-2 py-0.5 text-[10px] text-light-grey">Past</span>}
+                          {isPast && <span className="rounded-full bg-[#f0f0f0] px-2 py-0.5 text-[10px] text-black">Past</span>}
                         </div>
                         {entry.title && <p className="text-xs text-light-grey">{entry.title}{entry.description ? ` — ${entry.description}` : ""}</p>}
                       </div>
@@ -394,8 +390,8 @@ export default function StoreDetailPage() {
                         {entry.isOpen ? (
                           <span className="text-sm text-black">{entry.open} – {entry.close}</span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
-                            <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
+                            <span className="h-1.5 w-1.5 rounded-full bg-white" />
                             Closed
                           </span>
                         )}
@@ -448,16 +444,6 @@ export default function StoreDetailPage() {
                     onChange={(e) => setField("name", e.target.value)}
                   />
                   {errors.name && <p className="mt-1 text-xs text-error">Required.</p>}
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-xs text-light-grey">Store Code *</label>
-                  <input
-                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.storeCode ? "border-error" : "border-border"}`}
-                    value={form.storeCode}
-                    onChange={(e) => setField("storeCode", e.target.value)}
-                  />
-                  {errors.storeCode && <p className="mt-1 text-xs text-error">Required.</p>}
                 </div>
 
                 <div>
@@ -584,7 +570,7 @@ export default function StoreDetailPage() {
             <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
               <button
                 onClick={closeDialog}
-                className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
+                className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]"
               >
                 Cancel
               </button>
@@ -671,7 +657,7 @@ export default function StoreDetailPage() {
               <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
                 <button
                   onClick={closeDialog}
-                  className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
+                  className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]"
                 >
                   Cancel
                 </button>
@@ -709,7 +695,7 @@ export default function StoreDetailPage() {
               <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
                 <button
                   onClick={closeDialog}
-                  className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
+                  className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]"
                 >
                   Cancel
                 </button>

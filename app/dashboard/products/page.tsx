@@ -278,7 +278,7 @@ export default function ProductsPage() {
               onClick={() => setSelectedCategory(cat)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${selectedCategory === cat
                 ? "bg-primary text-white"
-                : "bg-soft-grey text-black hover:bg-beige"
+                : "bg-[#f0f0f0] text-black hover:bg-[#e0e0e0]"
                 }`}
             >
               {cat}
@@ -322,7 +322,7 @@ export default function ProductsPage() {
                           className="rounded-lg object-cover"
                         />
                       ) : (
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-soft-grey text-xs font-bold text-light-grey">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
                           {(product.name ?? "?")[0].toUpperCase()}
                         </div>
                       )}
@@ -330,7 +330,7 @@ export default function ProductsPage() {
                     </div>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-black">
+                    <span className="rounded-full bg-[#f0f0f0] px-2.5 py-1 text-xs font-medium text-black">
                       {getCategoryName(product.categoryId)}
                     </span>
                   </td>

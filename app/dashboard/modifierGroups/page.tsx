@@ -101,7 +101,7 @@ export default function ModifierGroupsPage() {
                         <tr className="border-b border-border bg-background">
                             <th className="px-5 py-3 text-left font-medium text-light-grey">Name</th>
                             {/* <th className="px-5 py-3 text-left font-medium text-light-grey">Selection Type</th> */}
-                            <th className="px-5 py-3 text-left font-medium text-light-grey">Required</th>
+                            {/* <th className="px-5 py-3 text-left font-medium text-light-grey">Required</th> */}
                             <th className="px-5 py-3 text-left font-medium text-light-grey">Modifiers</th>
                             <th className="px-5 py-3 text-right font-medium text-light-grey">Action</th>
                         </tr>
@@ -126,13 +126,13 @@ export default function ModifierGroupsPage() {
                         {group.selectionType ?? "—"}
                       </span>
                     </td> */}
-                                        <td className="px-5 py-3">
+                                        {/* <td className="px-5 py-3">
                                             {group.required ? (
                                                 <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-success">Yes</span>
                                             ) : (
                                                 <span className="rounded-full bg-soft-grey px-2 py-0.5 text-xs text-light-grey">No</span>
                                             )}
-                                        </td>
+                                        </td> */}
                                         <td className="px-5 py-3 text-light-grey">{modifierCount}</td>
                                         <td className="px-5 py-3 text-right">
                                             <button

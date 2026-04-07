@@ -96,7 +96,7 @@ export default function UsersPage() {
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-soft-grey text-xs font-bold text-light-grey">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
                           {initials}
                         </div>
                         <span className="font-medium text-black">{displayName}</span>
@@ -109,8 +109,8 @@ export default function UsersPage() {
                     </td>
                     <td className="px-5 py-3">
                       {user.disabled ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
-                          <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
                           Disabled
                         </span>
                       ) : (

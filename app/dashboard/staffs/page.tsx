@@ -213,7 +213,7 @@ function StaffDialog({
         <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
           <button
             onClick={onClose}
-            className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]"
           >
             Cancel
           </button>
@@ -406,20 +406,20 @@ export default function StaffsPage() {
                         Admin
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
                         Store Manager
                       </span>
                     )}
                   </td>
 
                   <td className="px-5 py-3 text-black">
-                    {storeNames(staff.storeIds)}
+                    {staff.role === "admin" ? "All Stores" : storeNames(staff.storeIds)}
                   </td>
 
                   <td className="px-5 py-3">
                     {staff.disabled ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
-                        <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
+                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
                         Disabled
                       </span>
                     ) : (

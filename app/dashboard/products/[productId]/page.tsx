@@ -215,7 +215,7 @@ export default function ProductDetailPage() {
                                 className="h-48 w-full object-cover"
                             />
                         ) : (
-                            <div className="flex h-48 items-center justify-center bg-soft-grey text-4xl font-bold text-light-grey">
+                            <div className="flex h-48 items-center justify-center bg-primary text-4xl font-bold text-white">
                                 {(product.name ?? "?")[0].toUpperCase()}
                             </div>
                         )}
@@ -241,7 +241,7 @@ export default function ProductDetailPage() {
                                 {product.availableToStores.map((storeId) => {
                                     const store = stores.find((s) => s.docId === storeId);
                                     return (
-                                        <span key={storeId} className="rounded-full bg-soft-grey px-2.5 py-1 text-xs text-black">
+                                        <span key={storeId} className="rounded-full bg-[#f0f0f0] px-2.5 py-1 text-xs text-black">
                                             {store?.name ?? storeId}
                                         </span>
                                     );
@@ -373,7 +373,7 @@ export default function ProductDetailPage() {
                                                             {m.isDefault ? (
                                                                 <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-success">Yes</span>
                                                             ) : (
-                                                                <span className="rounded-full bg-soft-grey px-2 py-0.5 text-xs text-light-grey">No</span>
+                                                                <span className="rounded-full bg-[#f0f0f0] px-2 py-0.5 text-xs text-black">No</span>
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-2.5 text-right">
@@ -442,7 +442,7 @@ export default function ProductDetailPage() {
                                     ))}
                                 </div>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
                                     <button onClick={handleUpdateProduct} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                                         {loading ? "Saving…" : "Save"}
                                     </button>
@@ -458,7 +458,7 @@ export default function ProductDetailPage() {
                                     Are you sure you want to delete <strong className="text-black">{product.name}</strong>? This cannot be undone.
                                 </p>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
                                     <button onClick={handleDeleteProduct} disabled={loading} className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                                         {loading ? "Deleting…" : "Delete"}
                                     </button>
@@ -514,7 +514,7 @@ export default function ProductDetailPage() {
                                     </label>
                                 </div>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
                                     <button onClick={handleSaveModifier} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                                         {loading ? "Saving…" : "Save"}
                                     </button>
@@ -528,7 +528,7 @@ export default function ProductDetailPage() {
                                 <h3 className="mb-2 text-lg font-semibold text-black">Delete Modifier</h3>
                                 <p className="text-sm text-light-grey">Are you sure you want to delete this modifier? This cannot be undone.</p>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
                                     <button onClick={handleDeleteModifier} disabled={loading} className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                                         {loading ? "Deleting…" : "Delete"}
                                     </button>

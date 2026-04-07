@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
+import { WEBAPP_VERSION } from "@/app/utils/constant";
 import { useState } from "react";
 
 const navItems = [
@@ -25,8 +26,8 @@ const navItems = [
   { href: "/dashboard/products", label: "Products", icon: Package },
   { href: "/dashboard/stores", label: "Stores", icon: Store },
   { href: "/dashboard/modifierGroups", label: "Modifier Groups", icon: Layers },
-  { href: "/dashboard/users", label: "Users", icon: Users },
-  { href: "/dashboard/staffs", label: "Staffs", icon: UserCheck },
+  { href: "/dashboard/users", label: "Customers", icon: Users },
+  { href: "/dashboard/staffs", label: "Users", icon: UserCheck },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/globalSettings", label: "Global Settings", icon: Settings },
   { href: "/dashboard/emailTemplates", label: "Email Templates", icon: Mail },
@@ -59,7 +60,7 @@ export function Sidebar() {
               key={href}
               href={href}
               data-active={isActive}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey data-[active=true]:bg-primary data-[active=true]:text-white"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey hover:text-white data-[active=true]:bg-primary data-[active=true]:text-white"
             >
               <Icon size={15} />
               {label}
@@ -70,11 +71,12 @@ export function Sidebar() {
       <div className="mt-auto border-t border-border p-3">
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey"
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey hover:text-white"
         >
           <LogOut size={15} />
           Logout
         </button>
+        <p className="mt-2 px-3 text-xs">v{WEBAPP_VERSION}</p>
       </div>
     </aside>
   );
@@ -126,7 +128,7 @@ export function MobileNav() {
           </Link>
           <button
             onClick={() => setOpen(false)}
-            className="rounded-lg p-1.5 text-black transition-colors hover:bg-soft-grey"
+            className="rounded-lg p-1.5 text-black transition-colors hover:bg-soft-grey hover:text-white"
             aria-label="Close navigation"
           >
             <X size={18} />
@@ -145,7 +147,7 @@ export function MobileNav() {
                 href={href}
                 onClick={() => setOpen(false)}
                 data-active={isActive}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey data-[active=true]:bg-primary data-[active=true]:text-white"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey hover:text-white data-[active=true]:bg-primary data-[active=true]:text-white"
               >
                 <Icon size={15} />
                 {label}

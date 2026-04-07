@@ -19,7 +19,6 @@ type DayHoursForm = {
 
 type StoreForm = {
   name: string;
-  storeCode: string;
   email: string;
   contactNumber: string;
   location: string;
@@ -35,7 +34,6 @@ const defaultDayHours: DayHoursForm = { isOpen: false, open: "08:00", close: "22
 
 const emptyForm: StoreForm = {
   name: "",
-  storeCode: "",
   email: "",
   contactNumber: "",
   location: "",
@@ -48,7 +46,7 @@ const emptyForm: StoreForm = {
 };
 
 const REQUIRED: (keyof Omit<StoreForm, "openingHours">)[] = [
-  "name", "storeCode", "email", "contactNumber", "location", "address",
+  "name", "email", "contactNumber", "location", "address",
 ];
 
 export default function StoresPage() {
@@ -104,7 +102,6 @@ export default function StoresPage() {
     try {
       await StoreService.createStore({
         name: form.name.trim(),
-        storeCode: form.storeCode.trim(),
         email: form.email.trim(),
         contactNumber: form.contactNumber.trim(),
         location: form.location.trim(),
@@ -148,7 +145,6 @@ export default function StoresPage() {
           <thead>
             <tr className="border-b border-border bg-background">
               <th className="px-5 py-3 text-left font-medium text-light-grey">Store</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Code</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Contact</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Printer ID</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Status</th>
@@ -157,7 +153,7 @@ export default function StoresPage() {
           <tbody className="divide-y divide-border">
             {stores.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={4} className="px-5 py-10 text-center text-light-grey">
                   No stores found.
                 </td>
               </tr>
@@ -190,9 +186,6 @@ export default function StoresPage() {
                         <span className="font-medium text-black">{store.name ?? "—"}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 font-mono text-xs text-light-grey">
-                      {store.storeCode ?? "—"}
-                    </td>
                     <td className="px-5 py-3">
                       <div className="space-y-0.5">
                         <p className="text-black">{store.email ?? "—"}</p>
@@ -202,8 +195,8 @@ export default function StoresPage() {
                     <td className="px-5 py-3 text-black">{store.printerId ?? "—"}</td>
                     <td className="px-5 py-3">
                       {isDisabled ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-disabled-bg px-2.5 py-1 text-xs font-medium text-light-grey">
-                          <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
                           Disabled
                         </span>
                       ) : isOpen ? (
@@ -212,8 +205,8 @@ export default function StoresPage() {
                           Open
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
-                          <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
                           Closed
                         </span>
                       )}
@@ -252,17 +245,6 @@ export default function StoresPage() {
                     onChange={(e) => setField("name", e.target.value)}
                   />
                   {errors.name && <p className="mt-1 text-xs text-error">Name is required.</p>}
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-xs text-light-grey">Store Code *</label>
-                  <input
-                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.storeCode ? "border-error" : "border-border"}`}
-                    placeholder="e.g. STR-001"
-                    value={form.storeCode}
-                    onChange={(e) => setField("storeCode", e.target.value)}
-                  />
-                  {errors.storeCode && <p className="mt-1 text-xs text-error">Required.</p>}
                 </div>
 
                 <div>
