@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useStaffStore } from "./store/useStaffStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
@@ -11,6 +11,8 @@ import { Store } from "@/app/dashboard/stores/interface/store";
 // ─── Form types ───────────────────────────────────────────────────────────────
 
 type StaffForm = {
+  firstName: string;
+  lastName: string;
   email: string;
   role: StaffRole | "";
   storeIds: string[];
@@ -24,6 +26,8 @@ type StaffFormErrors = {
 };
 
 const emptyForm: StaffForm = {
+  firstName: "",
+  lastName: "",
   email: "",
   role: "",
   storeIds: [],
@@ -61,6 +65,8 @@ type StaffDialogProps = {
   isEdit: boolean;
   onClose: () => void;
   onSubmit: () => void;
+  onChangeFirstName: (v: string) => void;
+  onChangeLastName: (v: string) => void;
   onChangeEmail: (v: string) => void;
   onChangeRole: (v: StaffRole | "") => void;
   onToggleStore: (storeId: string) => void;
@@ -78,6 +84,8 @@ function StaffDialog({
   isEdit,
   onClose,
   onSubmit,
+  onChangeFirstName,
+  onChangeLastName,
   onChangeEmail,
   onChangeRole,
   onToggleStore,
@@ -99,6 +107,30 @@ function StaffDialog({
         </div>
 
         <div className="max-h-[72vh] space-y-4 overflow-y-auto px-6 py-4">
+          {/* First Name & Last Name */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="mb-1.5 block text-xs text-light-grey">First Name</label>
+              <input
+                type="text"
+                value={form.firstName}
+                onChange={(e) => onChangeFirstName(e.target.value)}
+                placeholder="John"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1.5 block text-xs text-light-grey">Last Name</label>
+              <input
+                type="text"
+                value={form.lastName}
+                onChange={(e) => onChangeLastName(e.target.value)}
+                placeholder="Doe"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+
           {/* Email */}
           <div>
             <label className="mb-1.5 block text-xs text-light-grey">Email *</label>
@@ -242,6 +274,40 @@ export default function StaffsPage() {
   const staffs = useStaffStore((s) => s.staffs);
   const stores = useStoreStore((s) => s.stores);
 
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"All" | "admin" | "store_manager">("All");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Enabled" | "Disabled">("All");
+  type StaffSortKey = "email" | "role" | "status";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<StaffSortKey>("email");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: StaffSortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let result = staffs.filter((s) => {
+      if (roleFilter !== "All" && s.role !== roleFilter) return false;
+      if (statusFilter !== "All") {
+        if (statusFilter === "Enabled" && s.disabled) return false;
+        if (statusFilter === "Disabled" && !s.disabled) return false;
+      }
+      if (q && !s.email.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "email") cmp = a.email.localeCompare(b.email);
+      else if (sortKey === "role") cmp = a.role.localeCompare(b.role);
+      else cmp = Number(a.disabled) - Number(b.disabled);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [staffs, search, roleFilter, statusFilter, sortKey, sortDir]);
+
   // Create dialog state
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<StaffForm>(emptyForm);
@@ -277,6 +343,8 @@ export default function StaffsPage() {
     setCreateLoading(true);
     try {
       await StaffService.createStaff({
+        firstName: createForm.firstName.trim(),
+        lastName: createForm.lastName.trim(),
         email: createForm.email.trim(),
         role: createForm.role as StaffRole,
         storeIds: createForm.role === "admin"
@@ -298,6 +366,8 @@ export default function StaffsPage() {
   function openEdit(staff: Staff) {
     setEditTarget(staff);
     setEditForm({
+      firstName: staff.firstName ?? "",
+      lastName: staff.lastName ?? "",
       email: staff.email,
       role: staff.role,
       storeIds: staff.storeIds ?? [],
@@ -323,6 +393,8 @@ export default function StaffsPage() {
     setEditLoading(true);
     try {
       await StaffService.updateStaff(editTarget.docId, {
+        firstName: editForm.firstName.trim(),
+        lastName: editForm.lastName.trim(),
         email: editForm.email.trim(),
         role: editForm.role as StaffRole,
         storeIds: editForm.storeIds,
@@ -376,28 +448,79 @@ export default function StaffsPage() {
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          placeholder="Search by email…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-black outline-none placeholder:text-light-grey focus:border-primary sm:max-w-xs"
+        />
+        <div className="flex flex-wrap gap-2">
+          {(["All", "admin", "store_manager"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setRoleFilter(v)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${roleFilter === v ? "border-primary bg-primary text-white" : "border-border text-black hover:bg-soft-grey"}`}
+            >
+              {v === "All" ? "All Roles" : v === "admin" ? "Admin" : "Store Manager"}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(["All", "Enabled", "Disabled"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setStatusFilter(v)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === v ? "border-primary bg-primary text-white" : "border-border text-black hover:bg-soft-grey"}`}
+            >
+              {v === "All" ? "All Statuses" : v}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Email</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Role</th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Full Name</th>
+              <th
+                onClick={() => toggleSort("email")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Email {sortKey === "email" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
+              <th
+                onClick={() => toggleSort("role")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Role {sortKey === "role" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Assigned Stores</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Status</th>
+              <th
+                onClick={() => toggleSort("status")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Status {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-right font-medium text-light-grey">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {staffs.length === 0 ? (
+            {displayed.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
                   No staff members found.
                 </td>
               </tr>
             ) : (
-              staffs.map((staff) => (
-                <tr key={staff.docId} className="transition-colors hover:bg-background">
+              displayed.map((staff) => (
+                <tr key={staff.docId} onClick={() => openEdit(staff)} className="cursor-pointer transition-colors hover:bg-background">
+                  <td className="px-5 py-3 text-black">
+                    {[staff.firstName, staff.lastName].filter(Boolean).join(" ") || "—"}
+                  </td>
                   <td className="px-5 py-3 text-black">{staff.email}</td>
 
                   <td className="px-5 py-3">
@@ -433,13 +556,7 @@ export default function StaffsPage() {
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => openEdit(staff)}
-                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-black transition-colors hover:border-primary hover:text-primary"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(staff)}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(staff); }}
                         className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-error transition-colors hover:border-error hover:bg-red-50"
                       >
                         Delete
@@ -464,6 +581,8 @@ export default function StaffsPage() {
           isEdit={false}
           onClose={closeCreate}
           onSubmit={handleCreate}
+          onChangeFirstName={(v) => setCreateForm((f) => ({ ...f, firstName: v }))}
+          onChangeLastName={(v) => setCreateForm((f) => ({ ...f, lastName: v }))}
           onChangeEmail={(v) => {
             setCreateForm((f) => ({ ...f, email: v }));
             setCreateErrors((e) => ({ ...e, email: false }));
@@ -498,6 +617,8 @@ export default function StaffsPage() {
           isEdit={true}
           onClose={closeEdit}
           onSubmit={handleUpdate}
+          onChangeFirstName={(v) => setEditForm((f) => ({ ...f, firstName: v }))}
+          onChangeLastName={(v) => setEditForm((f) => ({ ...f, lastName: v }))}
           onChangeEmail={(v) => {
             setEditForm((f) => ({ ...f, email: v }));
             setEditErrors((e) => ({ ...e, email: false }));

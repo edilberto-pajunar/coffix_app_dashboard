@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Image from "next/image";
@@ -52,6 +52,52 @@ const REQUIRED: (keyof Omit<StoreForm, "openingHours">)[] = [
 export default function StoresPage() {
   const stores = useStoreStore((s) => s.stores);
   const router = useRouter();
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Open" | "Closed" | "Disabled">("All");
+  type StoreSortKey = "name" | "status";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<StoreSortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: StoreSortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let result = stores.filter((s) => {
+      if (statusFilter !== "All") {
+        const disabled = s.disable ?? false;
+        const open = !disabled && isStoreOpenAt(s);
+        const storeStatus = disabled ? "Disabled" : open ? "Open" : "Closed";
+        if (storeStatus !== statusFilter) return false;
+      }
+      if (q) {
+        return (
+          (s.name ?? "").toLowerCase().includes(q) ||
+          (s.email ?? "").toLowerCase().includes(q) ||
+          (s.contactNumber ?? "").toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") {
+        cmp = (a.name ?? "").localeCompare(b.name ?? "");
+      } else {
+        const getStatus = (s: typeof a) => {
+          if (s.disable) return "Disabled";
+          return isStoreOpenAt(s) ? "Open" : "Closed";
+        };
+        cmp = getStatus(a).localeCompare(getStatus(b));
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [stores, search, statusFilter, sortKey, sortDir]);
 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<StoreForm>(emptyForm);
@@ -140,25 +186,57 @@ export default function StoresPage() {
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          placeholder="Search stores…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-black outline-none placeholder:text-light-grey focus:border-primary sm:max-w-xs"
+        />
+        <div className="flex flex-wrap gap-2">
+          {(["All", "Open", "Closed", "Disabled"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setStatusFilter(v)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === v ? "border-primary bg-primary text-white" : "border-border text-black "}`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Store</th>
+              <th
+                onClick={() => toggleSort("name")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Store {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Contact</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Printer ID</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Status</th>
+              <th
+                onClick={() => toggleSort("status")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Status {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Disabled</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {stores.length === 0 ? (
+            {displayed.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
                   No stores found.
                 </td>
               </tr>
             ) : (
-              stores.map((store) => {
+              displayed.map((store) => {
                 const isOpen = isStoreOpenAt(store);
                 const isDisabled = store.disable ?? false;
 
@@ -210,6 +288,14 @@ export default function StoresPage() {
                           Closed
                         </span>
                       )}
+                    </td>
+                    <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isDisabled}
+                        onChange={() => StoreService.updateStore(store.docId, { disable: !isDisabled })}
+                        className="accent-primary h-4 w-4 cursor-pointer"
+                      />
                     </td>
                   </tr>
                 );

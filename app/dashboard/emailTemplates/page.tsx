@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useEmailTemplateStore } from "./store/useEmailTemplateStore";
 import { EmailTemplateService } from "./service/EmailTemplateService";
@@ -262,6 +262,40 @@ export default function EmailTemplatesPage() {
   const { user } = useAuth();
   const templates = useEmailTemplateStore((s) => s.templates);
 
+  const [search, setSearch] = useState("");
+  type TemplateSortKey = "name" | "updatedAt";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<TemplateSortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: TemplateSortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let result = templates.filter((t) => {
+      if (!q) return true;
+      return (
+        t.name.toLowerCase().includes(q) ||
+        t.docId.toLowerCase().includes(q) ||
+        (t.notes ?? "").toLowerCase().includes(q)
+      );
+    });
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") cmp = a.name.localeCompare(b.name);
+      else {
+        const at = a.updatedAt?.toDate().getTime() ?? 0;
+        const bt = b.updatedAt?.toDate().getTime() ?? 0;
+        cmp = at - bt;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [templates, search, sortKey, sortDir]);
+
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<TemplateForm>(emptyForm);
   const [createErrors, setCreateErrors] = useState<TemplateFormErrors>({});
@@ -374,28 +408,48 @@ export default function EmailTemplatesPage() {
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          placeholder="Search by name, ID or notes…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-black outline-none placeholder:text-light-grey focus:border-primary sm:max-w-xs"
+        />
+      </div>
+
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Name</th>
+              <th
+                onClick={() => toggleSort("name")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Name {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Doc ID</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Variables</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Notes</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Last Updated</th>
+              <th
+                onClick={() => toggleSort("updatedAt")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Last Updated {sortKey === "updatedAt" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-right font-medium text-light-grey">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {templates.length === 0 ? (
+            {displayed.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
                   No email templates found.
                 </td>
               </tr>
             ) : (
-              templates.map((template) => (
+              displayed.map((template) => (
                 <tr key={template.docId} className="transition-colors hover:bg-background">
                   <td className="px-5 py-3 font-medium text-black">{template.name}</td>
                   <td className="px-5 py-3 font-mono text-xs text-light-grey">{template.docId}</td>

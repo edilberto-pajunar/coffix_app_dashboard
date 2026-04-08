@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
@@ -683,6 +683,40 @@ export default function NotificationsPage() {
   const currentStaff = staffs.find((s) => s.docId === user?.uid);
   const isAdmin = currentStaff?.role === "admin";
 
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"All" | CampaignStatus>("All");
+  const [channelFilter, setChannelFilter] = useState<"All" | NotificationChannel>("All");
+  type NotifSortKey = "name" | "status" | "schedule";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<NotifSortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: NotifSortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let result = campaigns.filter((c) => {
+      if (statusFilter !== "All" && c.status !== statusFilter) return false;
+      if (channelFilter !== "All" && !c.channels.includes(channelFilter)) return false;
+      if (q && !c.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") cmp = a.name.localeCompare(b.name);
+      else if (sortKey === "status") cmp = a.status.localeCompare(b.status);
+      else {
+        const getTime = (c: typeof a) => c.schedule.sendAt?.toDate().getTime() ?? 0;
+        cmp = getTime(a) - getTime(b);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [campaigns, search, statusFilter, channelFilter, sortKey, sortDir]);
+
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<NotificationCampaign | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NotificationCampaign | null>(null);
@@ -777,12 +811,44 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          placeholder="Search campaigns…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-black outline-none placeholder:text-light-grey focus:border-primary sm:max-w-xs"
+        />
+        <div className="flex flex-wrap gap-2">
+          {(["All", "draft", "scheduled", "sent", "cancelled"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setStatusFilter(v)}
+              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === v ? "border-primary bg-primary text-white" : "border-border text-black hover:bg-soft-grey"}`}
+            >
+              {v === "All" ? "All Statuses" : v}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(["All", "in_app", "popup", "email"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setChannelFilter(v)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${channelFilter === v ? "border-primary bg-primary text-white" : "border-border text-black hover:bg-soft-grey"}`}
+            >
+              {v === "All" ? "All Channels" : CHANNEL_LABELS[v as NotificationChannel]}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Table */}
       <div className="rounded-xl border border-border bg-white shadow-(--shadow)">
-        {campaigns.length === 0 ? (
+        {displayed.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-light-grey">
             <p className="text-sm">No campaigns yet.</p>
-            {isAdmin && (
+            {isAdmin && campaigns.length === 0 && (
               <button
                 onClick={openCreate}
                 className="mt-3 text-sm text-primary underline-offset-2 hover:underline"
@@ -796,17 +862,32 @@ export default function NotificationsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-light-grey">
-                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th
+                    onClick={() => toggleSort("name")}
+                    className="cursor-pointer select-none px-4 py-3 font-medium hover:text-black"
+                  >
+                    Name {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+                  </th>
                   <th className="px-4 py-3 font-medium">Channels</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Schedule</th>
+                  <th
+                    onClick={() => toggleSort("status")}
+                    className="cursor-pointer select-none px-4 py-3 font-medium hover:text-black"
+                  >
+                    Status {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+                  </th>
+                  <th
+                    onClick={() => toggleSort("schedule")}
+                    className="cursor-pointer select-none px-4 py-3 font-medium hover:text-black"
+                  >
+                    Schedule {sortKey === "schedule" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+                  </th>
                   {isAdmin && (
                     <th className="px-4 py-3 font-medium">Actions</th>
                   )}
                 </tr>
               </thead>
               <tbody>
-                {campaigns.map((c) => (
+                {displayed.map((c) => (
                   <tr
                     key={c.docId}
                     className="border-b border-border last:border-0 hover:bg-soft-grey/40"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "./store/useDashboardStore";
@@ -93,7 +93,7 @@ function MultiSelect({
           <p className="px-1 py-1 text-xs text-light-grey">No options available.</p>
         ) : (
           options.map((opt) => (
-            <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black hover:bg-soft-grey">
+            <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black ">
               <input
                 type="checkbox"
                 checked={selected.includes(opt.value)}
@@ -124,29 +124,42 @@ export default function ProductsPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  type ProductSortKey = "name" | "price" | "cost";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<ProductSortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: ProductSortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<NewProductForm>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<keyof NewProductForm, boolean>>>({});
   const [loading, setLoading] = useState(false);
-
-  const [showCategories, setShowCategories] = useState(false);
-  const [categoryDialog, setCategoryDialog] = useState<"create" | "edit" | "delete" | null>(null);
-  const [categoryForm, setCategoryForm] = useState({ name: "", order: "" });
-  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
-  const [categoryErrors, setCategoryErrors] = useState<{ name?: boolean }>({});
-  const [categoryLoading, setCategoryLoading] = useState(false);
 
   const categoryFilters = [
     "All",
     ...Array.from(new Set(products.map((p) => getCategoryName(p.categoryId)))),
   ];
 
-  const filtered = products.filter((p) => {
-    const matchesSearch = (p.name ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "All" ? true : getCategoryName(p.categoryId) === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const filtered = useMemo(() => {
+    let result = products.filter((p) => {
+      const matchesSearch = (p.name ?? "").toLowerCase().includes(search.toLowerCase());
+      const matchesCategory =
+        selectedCategory === "All" ? true : getCategoryName(p.categoryId) === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") cmp = (a.name ?? "").localeCompare(b.name ?? "");
+      else if (sortKey === "price") cmp = (a.price ?? 0) - (b.price ?? 0);
+      else cmp = (a.cost ?? 0) - (b.cost ?? 0);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [products, search, selectedCategory, getCategoryName, sortKey, sortDir]);
 
   function setField<K extends keyof NewProductForm>(key: K, value: NewProductForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -199,51 +212,6 @@ export default function ProductsPage() {
     }
   }
 
-  async function handleSaveCategory() {
-    if (!categoryForm.name.trim()) {
-      setCategoryErrors({ name: true });
-      return;
-    }
-    setCategoryErrors({});
-    setCategoryLoading(true);
-    try {
-      const data = {
-        name: categoryForm.name.trim(),
-        ...(categoryForm.order !== "" ? { order: categoryForm.order } : {}),
-      };
-      if (categoryDialog === "create") {
-        await ProductService.createCategory(data);
-      } else if (categoryDialog === "edit" && activeCategoryId) {
-        await ProductService.updateCategory(activeCategoryId, data);
-      }
-      toast.success(categoryDialog === "create" ? "Category created." : "Category updated.");
-      setCategoryDialog(null);
-      setCategoryForm({ name: "", order: "" });
-      setActiveCategoryId(null);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to save category.");
-    } finally {
-      setCategoryLoading(false);
-    }
-  }
-
-  async function handleDeleteCategory() {
-    if (!activeCategoryId) return;
-    setCategoryLoading(true);
-    try {
-      await ProductService.deleteCategory(activeCategoryId);
-      toast.success("Category deleted.");
-      setCategoryDialog(null);
-      setActiveCategoryId(null);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to delete category.");
-    } finally {
-      setCategoryLoading(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -253,14 +221,7 @@ export default function ProductsPage() {
             {products.length} product{products.length !== 1 ? "s" : ""} total
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowCategories(true)}>
-            Manage Categories
-          </Button>
-          <Button onClick={() => setShowCreate(true)}>
-            + New Product
-          </Button>
-        </div>
+        <Button onClick={() => setShowCreate(true)}>+ New Product</Button>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -291,10 +252,25 @@ export default function ProductsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Product</th>
+              <th
+                onClick={() => toggleSort("name")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Product {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Category</th>
-              <th className="px-5 py-3 text-right font-medium text-light-grey">Price</th>
-              <th className="px-5 py-3 text-right font-medium text-light-grey">Cost</th>
+              <th
+                onClick={() => toggleSort("price")}
+                className="cursor-pointer select-none px-5 py-3 text-right font-medium text-light-grey hover:text-black"
+              >
+                Price {sortKey === "price" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
+              <th
+                onClick={() => toggleSort("cost")}
+                className="cursor-pointer select-none px-5 py-3 text-right font-medium text-light-grey hover:text-black"
+              >
+                Cost {sortKey === "cost" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -335,10 +311,10 @@ export default function ProductsPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right font-semibold text-primary">
-                    {(product.price ?? 0).toFixed(2)}
+                    ${(product.price ?? 0).toFixed(2)}
                   </td>
                   <td className="px-5 py-3 text-right text-light-grey">
-                    {(product.cost ?? 0).toFixed(2)}
+                    ${(product.cost ?? 0).toFixed(2)}
                   </td>
                 </tr>
               ))
@@ -377,26 +353,34 @@ export default function ProductsPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs text-light-grey">Price *</label>
-                <input
-                  type="number"
-                  min={0}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.price ? "border-error" : "border-border"}`}
-                  placeholder="0.00"
-                  value={form.price}
-                  onChange={(e) => setField("price", e.target.value)}
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className={`w-full rounded-lg border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.price ? "border-error" : "border-border"}`}
+                    placeholder="0.00"
+                    value={form.price}
+                    onChange={(e) => setField("price", e.target.value)}
+                  />
+                </div>
                 {errors.price && <p className="mt-1 text-xs text-error">Required.</p>}
               </div>
               <div>
                 <label className="mb-1.5 block text-xs text-light-grey">Cost *</label>
-                <input
-                  type="number"
-                  min={0}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.cost ? "border-error" : "border-border"}`}
-                  placeholder="0.00"
-                  value={form.cost}
-                  onChange={(e) => setField("cost", e.target.value)}
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className={`w-full rounded-lg border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.cost ? "border-error" : "border-border"}`}
+                    placeholder="0.00"
+                    value={form.cost}
+                    onChange={(e) => setField("cost", e.target.value)}
+                  />
+                </div>
                 {errors.cost && <p className="mt-1 text-xs text-error">Required.</p>}
               </div>
               <div>
@@ -455,142 +439,6 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Manage Categories Dialog ── */}
-      <Dialog open={showCategories} onOpenChange={setShowCategories}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manage Categories</DialogTitle>
-          </DialogHeader>
-
-          <div className="max-h-[55vh] overflow-y-auto">
-            {categories.length === 0 ? (
-              <p className="py-6 text-center text-sm text-light-grey">No categories yet.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="pb-2 text-left font-medium text-light-grey">Name</th>
-                    <th className="pb-2 text-right font-medium text-light-grey">Order</th>
-                    <th className="pb-2 text-right font-medium text-light-grey">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {categories.map((c) => (
-                    <tr key={c.docId}>
-                      <td className="py-2.5 text-black">{c.name}</td>
-                      <td className="py-2.5 text-right text-light-grey">{c.order ?? "—"}</td>
-                      <td className="py-2.5 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() => {
-                              setActiveCategoryId(c.docId ?? null);
-                              setCategoryForm({ name: c.name ?? "", order: c.order != null ? String(c.order) : "" });
-                              setCategoryDialog("edit");
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="xs"
-                            onClick={() => {
-                              setActiveCategoryId(c.docId ?? null);
-                              setCategoryDialog("delete");
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              className="w-full border-dashed"
-              onClick={() => { setCategoryForm({ name: "", order: "" }); setCategoryDialog("create"); }}
-            >
-              + New Category
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Create / Edit Category Dialog ── */}
-      <Dialog
-        open={categoryDialog === "create" || categoryDialog === "edit"}
-        onOpenChange={(open) => { if (!open) { setCategoryDialog(null); setCategoryErrors({}); } }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {categoryDialog === "create" ? "New Category" : "Edit Category"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs text-light-grey">Name *</label>
-              <input
-                className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${categoryErrors.name ? "border-error" : "border-border"}`}
-                placeholder="e.g. Drinks"
-                value={categoryForm.name}
-                onChange={(e) => { setCategoryForm((f) => ({ ...f, name: e.target.value })); setCategoryErrors({}); }}
-              />
-              {categoryErrors.name && <p className="mt-1 text-xs text-error">Name is required.</p>}
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs text-light-grey">Order</label>
-              <input
-                type="number"
-                min={0}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                placeholder="0"
-                value={categoryForm.order}
-                onChange={(e) => setCategoryForm((f) => ({ ...f, order: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setCategoryDialog(null); setCategoryErrors({}); }}>Cancel</Button>
-            <Button onClick={handleSaveCategory} disabled={categoryLoading}>
-              {categoryLoading ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Delete Category Confirmation Dialog ── */}
-      <Dialog
-        open={categoryDialog === "delete"}
-        onOpenChange={(open) => { if (!open) setCategoryDialog(null); }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete Category</DialogTitle>
-          </DialogHeader>
-
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete this category? This action cannot be undone.
-          </p>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCategoryDialog(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteCategory} disabled={categoryLoading}>
-              {categoryLoading ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

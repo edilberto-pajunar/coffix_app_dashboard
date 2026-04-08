@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserStore } from "./store/useUserStore";
 
@@ -32,17 +32,54 @@ export default function UsersPage() {
   const users = useUserStore((s) => s.users);
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Disabled">("All");
+  type UserSortKey = "name" | "credit" | "createdAt";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<UserSortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const query = search.trim().toLowerCase();
-  const filtered = users.filter((u) => {
-    if (!query) return true;
-    const name = `${u.firstName ?? ""} ${u.lastName ?? ""} ${u.nickName ?? ""}`.toLowerCase();
-    return (
-      name.includes(query) ||
-      (u.email ?? "").toLowerCase().includes(query) ||
-      (u.mobile ?? "").toLowerCase().includes(query)
-    );
-  });
+  function toggleSort(key: UserSortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    let result = users.filter((u) => {
+      if (statusFilter === "Active" && u.disabled) return false;
+      if (statusFilter === "Disabled" && !u.disabled) return false;
+      if (query) {
+        const name = `${u.firstName ?? ""} ${u.lastName ?? ""} ${u.nickName ?? ""}`.toLowerCase();
+        return (
+          name.includes(query) ||
+          (u.email ?? "").toLowerCase().includes(query) ||
+          (u.mobile ?? "").toLowerCase().includes(query)
+        );
+      }
+      return true;
+    });
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") {
+        const na = getDisplayName(a);
+        const nb = getDisplayName(b);
+        cmp = na.localeCompare(nb);
+      } else if (sortKey === "credit") {
+        cmp = (a.creditAvailable ?? 0) - (b.creditAvailable ?? 0);
+      } else {
+        const getTs = (u: typeof a) => {
+          const v = u.createdAt;
+          if (!v) return 0;
+          if (v instanceof Date) return v.getTime();
+          if (typeof v === "object" && "seconds" in (v as object)) return (v as { seconds: number }).seconds * 1000;
+          return 0;
+        };
+        cmp = getTs(a) - getTs(b);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [users, search, statusFilter, sortKey, sortDir]);
 
   return (
     <div className="space-y-6">
@@ -55,26 +92,52 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <div>
+      <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
           placeholder="Search by name, email or mobile…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-sm rounded-lg border border-border bg-white px-3 py-2 text-sm text-black outline-none focus:border-primary"
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-black outline-none placeholder:text-light-grey focus:border-primary sm:max-w-xs"
         />
+        <div className="flex flex-wrap gap-2">
+          {(["All", "Active", "Disabled"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setStatusFilter(v)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === v ? "border-primary bg-primary text-white" : "border-border text-black hover:bg-soft-grey"}`}
+            >
+              {v === "All" ? "All Statuses" : v}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Name</th>
+              <th
+                onClick={() => toggleSort("name")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Name {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Email</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Mobile</th>
-              <th className="px-5 py-3 text-right font-medium text-light-grey">Credit</th>
+              <th
+                onClick={() => toggleSort("credit")}
+                className="cursor-pointer select-none px-5 py-3 text-right font-medium text-light-grey hover:text-black"
+              >
+                Credit {sortKey === "credit" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Status</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Created At</th>
+              <th
+                onClick={() => toggleSort("createdAt")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Created At {sortKey === "createdAt" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -91,7 +154,7 @@ export default function UsersPage() {
                 return (
                   <tr
                     key={user.docId}
-                    onClick={() => router.push(`/users/${user.docId}`)}
+                    onClick={() => router.push(`/dashboard/users/${user.docId}`)}
                     className="transition-colors hover:bg-background cursor-pointer"
                   >
                     <td className="px-5 py-3">

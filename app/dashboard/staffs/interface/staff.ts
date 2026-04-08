@@ -7,4 +7,6 @@ export interface Staff {
   storeIds?: string[];
   disabled: boolean;
   createdAt?: unknown;
+  firstName?: string;
+  lastName?: string;
 }

@@ -222,8 +222,8 @@ export default function ProductDetailPage() {
                         <div className="divide-y divide-border p-0">
                             {[
                                 { label: "Category", value: getCategoryName(product.categoryId) },
-                                { label: "Price", value: `₱${(product.price ?? 0).toFixed(2)}` },
-                                { label: "Cost", value: `₱${(product.cost ?? 0).toFixed(2)}` },
+                                { label: "Price", value: `$${(product.price ?? 0).toFixed(2)}` },
+                                { label: "Cost", value: `$${(product.cost ?? 0).toFixed(2)}` },
                                 { label: "Order", value: product.order ?? "—" },
                             ].map(({ label, value }) => (
                                 <div key={label} className="flex items-center justify-between px-4 py-3">
@@ -367,7 +367,7 @@ export default function ProductDetailPage() {
                                                     <tr key={m.docId} className="transition-colors hover:bg-background">
                                                         <td className="px-4 py-2.5 font-medium text-black">{m.label ?? "—"}</td>
                                                         <td className="px-4 py-2.5 text-primary">
-                                                            {(m.priceDelta ?? 0) >= 0 ? "+" : ""}₱{(m.priceDelta ?? 0).toFixed(2)}
+                                                            {(m.priceDelta ?? 0) >= 0 ? "+" : ""}${(m.priceDelta ?? 0).toFixed(2)}
                                                         </td>
                                                         <td className="px-4 py-2.5">
                                                             {m.isDefault ? (
@@ -429,17 +429,33 @@ export default function ProductDetailPage() {
                                             />
                                         </div>
                                     ))}
-                                    {(["price", "cost", "order"] as const).map((field) => (
+                                    {(["price", "cost"] as const).map((field) => (
                                         <div key={field}>
                                             <label className="mb-1 block text-xs text-light-grey capitalize">{field}</label>
-                                            <input
-                                                type="number"
-                                                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                                value={(productForm[field] as number) ?? ""}
-                                                onChange={(e) => setProductForm((f) => ({ ...f, [field]: parseFloat(e.target.value) }))}
-                                            />
+                                            <div className="relative">
+                                                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    step="0.01"
+                                                    className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                                    placeholder="0.00"
+                                                    value={(productForm[field] as number) ?? ""}
+                                                    onChange={(e) => setProductForm((f) => ({ ...f, [field]: parseFloat(e.target.value) }))}
+                                                />
+                                            </div>
                                         </div>
                                     ))}
+                                    <div>
+                                        <label className="mb-1 block text-xs text-light-grey capitalize">Order</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                            value={(productForm.order as number) ?? ""}
+                                            onChange={(e) => setProductForm((f) => ({ ...f, order: parseInt(e.target.value) }))}
+                                        />
+                                    </div>
                                 </div>
                                 <div className="mt-5 flex justify-end gap-2">
                                     <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
@@ -482,13 +498,18 @@ export default function ProductDetailPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="mb-1 block text-xs text-light-grey">Price Delta (₱)</label>
-                                        <input
-                                            type="number"
-                                            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                            value={modifierForm.priceDelta ?? 0}
-                                            onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: parseFloat(e.target.value) }))}
-                                        />
+                                        <label className="mb-1 block text-xs text-light-grey">Price Delta ($)</label>
+                                        <div className="relative">
+                                            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                                placeholder="0.00"
+                                                value={modifierForm.priceDelta ?? 0}
+                                                onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: parseFloat(e.target.value) }))}
+                                            />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="mb-1 block text-xs text-light-grey">Group ID</label>
