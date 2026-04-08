@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useEmailTemplateStore } from "./store/useEmailTemplateStore";
 import { EmailTemplateService } from "./service/EmailTemplateService";
@@ -8,6 +8,9 @@ import { EmailTemplate } from "./interface/emailTemplate";
 import { useAuth } from "@/app/lib/AuthContext";
 import { formatDocId } from "@/app/utils/formatting";
 import { renderEmailTemplate } from "@/app/lib/renderEmailTemplate";
+import { sanitizeHtml } from "@/app/lib/sanitize";
+import { RichTextEditor } from "@/app/components/RichTextEditor/RichTextEditor";
+import type { Editor } from "@tiptap/react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,7 +27,11 @@ type TemplateFormErrors = { name?: boolean; content?: boolean };
 const emptyForm: TemplateForm = { name: "", content: "", notes: "" };
 
 function validateForm(form: TemplateForm): TemplateFormErrors {
-  return { name: !form.name.trim(), content: !form.content.trim() };
+  const emptyContent =
+    !form.content.trim() ||
+    form.content === "<p></p>" ||
+    form.content === "<p><br></p>";
+  return { name: !form.name.trim(), content: emptyContent };
 }
 function hasErrors(e: TemplateFormErrors) { return Object.values(e).some(Boolean); }
 
@@ -33,27 +40,12 @@ function hasErrors(e: TemplateFormErrors) { return Object.values(e).some(Boolean
 type VariableChipsProps = {
   variables: string[];
   content: string;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  onInsert: (newContent: string) => void;
+  editor: Editor | null;
 };
 
-function VariableChips({ variables, content, textareaRef, onInsert }: VariableChipsProps) {
+function VariableChips({ variables, content, editor }: VariableChipsProps) {
   function insertVariable(varName: string) {
-    const el = textareaRef.current;
-    const insertion = `{{ ${varName} }}`;
-    if (!el) {
-      onInsert(content + insertion);
-      return;
-    }
-    const start = el.selectionStart ?? content.length;
-    const end = el.selectionEnd ?? content.length;
-    const next = content.slice(0, start) + insertion + content.slice(end);
-    onInsert(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + insertion.length;
-      el.setSelectionRange(pos, pos);
-    });
+    editor?.chain().focus().insertContent(`{{ ${varName} }}`).run();
   }
 
   const usedTokens = new Set(extractTokens(content));
@@ -113,7 +105,7 @@ function TemplateDialog({
   title, form, errors, loading, isEdit, variables,
   onClose, onSubmit, onChangeName, onChangeContent, onChangeNotes,
 }: TemplateDialogProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
 
   return (
     <div
@@ -138,7 +130,7 @@ function TemplateDialog({
               onChange={(e) => onChangeName(e.target.value)}
               placeholder="e.g. Welcome Email"
               disabled={isEdit}
-              className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary disabled:cursor-not-allowed disabled:bg-soft-grey ${
+              className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary disabled:cursor-not-allowed  ${
                 errors.name ? "border-error" : "border-border"
               }`}
             />
@@ -163,19 +155,16 @@ function TemplateDialog({
             <VariableChips
               variables={variables}
               content={form.content}
-              textareaRef={textareaRef}
-              onInsert={onChangeContent}
+              editor={editorInstance}
             />
 
-            <textarea
-              ref={textareaRef}
-              rows={12}
+            <RichTextEditor
+              key={isEdit ? "edit" : "new"}
               value={form.content}
-              onChange={(e) => onChangeContent(e.target.value)}
-              placeholder={"<p>Hi {{ firstName }},</p>\n<p>Your balance is <strong>{{ credits }}</strong>.</p>"}
-              className={`w-full resize-y rounded-lg border px-3 py-2 font-mono text-xs text-black outline-none focus:border-primary ${
-                errors.content ? "border-error" : "border-border"
-              }`}
+              onChange={onChangeContent}
+              hasError={!!errors.content}
+              placeholder="Hi {{ firstName }}, …"
+              onEditorReady={setEditorInstance}
             />
 
             {errors.content && (
@@ -387,7 +376,7 @@ export default function EmailTemplatesPage() {
     const sampleVars = Object.fromEntries(
       (template.variables ?? []).map((v) => [v, `[${v}]`])
     );
-    setPreviewHtml(renderEmailTemplate(template.content, sampleVars));
+    setPreviewHtml(sanitizeHtml(renderEmailTemplate(template.content, sampleVars)));
   }
 
   return (
