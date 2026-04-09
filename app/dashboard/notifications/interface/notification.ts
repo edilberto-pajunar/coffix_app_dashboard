@@ -18,6 +18,7 @@ export interface NotificationCampaign {
     storeIds?: string[];
     birthdayMonth?: number; // 1–12
     filters?: UserFilter[];
+    filterLogic?: "AND" | "OR";
   };
   template: {
     title: string;

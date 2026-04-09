@@ -4,4 +4,5 @@ export interface Modifier {
   isDefault?: boolean;
   label?: string;
   priceDelta?: number;
+  cost?: number;
 }

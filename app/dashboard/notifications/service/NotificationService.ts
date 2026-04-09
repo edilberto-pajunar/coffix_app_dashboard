@@ -14,9 +14,9 @@ import { NotificationCampaign } from "../interface/notification";
 
 export const NotificationService = {
   listenToCampaigns: (
-    onUpdate: (campaigns: NotificationCampaign[]) => void
+    onUpdate: (campaigns: NotificationCampaign[]) => void,
   ): Unsubscribe =>
-    onSnapshot(collection(db, "notif"), (snap) => {
+    onSnapshot(collection(db, "campaigns"), (snap) => {
       const campaigns = snap.docs.map((d) => ({
         ...d.data(),
         docId: d.id,
@@ -26,9 +26,9 @@ export const NotificationService = {
 
   createCampaign: async (
     data: Omit<NotificationCampaign, "docId">,
-    createdBy: string
+    createdBy: string,
   ) => {
-    const ref = doc(collection(db, "notif"));
+    const ref = doc(collection(db, "campaigns"));
     await setDoc(ref, {
       ...data,
       docId: ref.id,
@@ -40,9 +40,10 @@ export const NotificationService = {
 
   updateCampaign: (
     docId: string,
-    data: Partial<Omit<NotificationCampaign, "docId" | "createdAt" | "createdBy">>
-  ) => updateDoc(doc(db, "notif", docId), data as DocumentData),
+    data: Partial<
+      Omit<NotificationCampaign, "docId" | "createdAt" | "createdBy">
+    >,
+  ) => updateDoc(doc(db, "campaigns", docId), data as DocumentData),
 
-  deleteCampaign: (docId: string) =>
-    deleteDoc(doc(db, "notif", docId)),
+  deleteCampaign: (docId: string) => deleteDoc(doc(db, "campaigns", docId)),
 };

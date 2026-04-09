@@ -149,23 +149,50 @@ function Field({
   value,
   onChange,
   placeholder,
+  prefix,
+  suffix,
+  money,
 }: {
   label: string;
   type: "number" | "text";
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  prefix?: string;
+  suffix?: string;
+  money?: boolean;
 }) {
+  const paddingLeft = prefix ? "pl-7" : "px-3";
+  const paddingRight = suffix ? "pr-12" : "px-3";
+  const padding = prefix ? `${paddingLeft} pr-3` : suffix ? `pl-3 ${paddingRight}` : "px-3";
+
+  const displayValue =
+    money && value !== "" && !isNaN(Number(value))
+      ? Number(value).toFixed(2)
+      : value;
+
   return (
     <div>
       <label className="mb-1.5 block text-xs text-light-grey">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-      />
+      <div className="relative">
+        {prefix && (
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">
+            {prefix}
+          </span>
+        )}
+        <input
+          type={type}
+          value={displayValue}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`w-full rounded-lg border border-border ${padding} py-2 text-sm text-black outline-none focus:border-primary`}
+        />
+        {suffix && (
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-light-grey">
+            {suffix}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -271,23 +298,27 @@ export default function GlobalSettingsPage() {
             value={form.GST}
             onChange={setField("GST")}
             placeholder="0.09"
+            suffix="%"
           />
           <Field
             label="Withdrawal Fee"
             type="number"
             value={form.withdrawalFee}
             onChange={setField("withdrawalFee")}
-            placeholder="0"
+            placeholder="0.00"
+            prefix="$"
+            money
           />
         </Section>
 
-        <Section title="Loyalty Discounts">
+        <Section title="Coffix Credit Discount">
           <Field
             label="Basic Discount (Level 1)"
             type="number"
             value={form.basicDiscount}
             onChange={setField("basicDiscount")}
             placeholder="0.05"
+            suffix="%"
           />
           <Field
             label="Discount Level 2"
@@ -295,6 +326,7 @@ export default function GlobalSettingsPage() {
             value={form.discountLevel2}
             onChange={setField("discountLevel2")}
             placeholder="0.10"
+            suffix="%"
           />
           <Field
             label="Discount Level 3"
@@ -302,30 +334,37 @@ export default function GlobalSettingsPage() {
             value={form.discountLevel3}
             onChange={setField("discountLevel3")}
             placeholder="0.15"
+            suffix="%"
           />
         </Section>
 
-        <Section title="Loyalty Thresholds">
-        <Field
+        <Section title="Coffix Credit TopUp Amount">
+          <Field
             label="Top Up Level 1"
             type="number"
             value={form.minTopUp}
             onChange={setField("minTopUp")}
-            placeholder="10"
+            placeholder="0.00"
+            prefix="$"
+            money
           />
           <Field
             label="Top Up Level 2"
             type="number"
             value={form.topupLevel2}
             onChange={setField("topupLevel2")}
-            placeholder="100"
+            placeholder="0.00"
+            prefix="$"
+            money
           />
           <Field
             label="Top Up Level 3"
             type="number"
             value={form.topupLevel3}
             onChange={setField("topupLevel3")}
-            placeholder="300"
+            placeholder="0.00"
+            prefix="$"
+            money
           />
         </Section>
 
@@ -336,6 +375,7 @@ export default function GlobalSettingsPage() {
             value={form.maxDayBetweenLogin}
             onChange={setField("maxDayBetweenLogin")}
             placeholder="90"
+            suffix="days"
           />
           <Field
             label="Min Credit to Share"
@@ -343,6 +383,7 @@ export default function GlobalSettingsPage() {
             value={form.minCreditToShare}
             onChange={setField("minCreditToShare")}
             placeholder="10"
+            suffix="credits"
           />
           {/* <Field
             label="Min Top Up"

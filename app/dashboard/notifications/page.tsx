@@ -31,6 +31,7 @@ type CampaignForm = {
   storeIds: string[];
   birthdayMonth: string; // "" = any, "1"–"12"
   filters: FilterRow[];
+  filterLogic: "AND" | "OR";
   title: string;
   body: string;
   buttonText: string;
@@ -56,6 +57,7 @@ const emptyForm: CampaignForm = {
   storeIds: [],
   birthdayMonth: "",
   filters: [],
+  filterLogic: "AND",
   title: "",
   body: "",
   buttonText: "",
@@ -87,6 +89,7 @@ function campaignToForm(c: NotificationCampaign): CampaignForm {
       operator: f.operator,
       value: String(f.value),
     })),
+    filterLogic: c.audience.filterLogic ?? "AND",
     title: c.template.title,
     body: c.template.body,
     buttonText: c.template.buttonText ?? "",
@@ -129,6 +132,9 @@ function formToPayload(
       operator: f.operator,
       value: f.value.trim(),
     }));
+    if (validFilters.length >= 2) {
+      audience.filterLogic = form.filterLogic;
+    }
   }
 
   const template: NotificationCampaign["template"] = {
@@ -174,7 +180,7 @@ const STATUS_STYLES: Record<CampaignStatus, string> = {
 };
 
 const CHANNEL_LABELS: Record<NotificationChannel, string> = {
-  in_app: "In-App",
+  in_app: "Push Notification",
   popup: "Popup",
   email: "Email",
   sms: "SMS",
@@ -189,6 +195,13 @@ const OPERATORS: UserFilter["operator"][] = [
   "==", "!=", ">=", "<=", ">", "<", "array-contains",
 ];
 
+const USER_FILTER_FIELDS = [
+  "creditAvailable", "email", "firstName", "lastName", "nickName",
+  "mobile", "birthday", "suburb", "city", "preferredStoreId",
+  "emailVerified", "getPurchaseInfoByMail", "getPromotions",
+  "allowWinACoffee", "disabled", "qrId", "fcmToken",
+];
+
 // ─── Form dialog ──────────────────────────────────────────────────────────────
 
 function CampaignDialog({
@@ -199,6 +212,7 @@ function CampaignDialog({
   storeOptions,
   onClose,
   onSaveDraft,
+  onTest,
   onSend,
   setForm,
 }: {
@@ -209,6 +223,7 @@ function CampaignDialog({
   storeOptions: { docId: string; name?: string }[];
   onClose: () => void;
   onSaveDraft: () => void;
+  onTest: () => void;
   onSend: () => void;
   setForm: React.Dispatch<React.SetStateAction<CampaignForm>>;
 }) {
@@ -340,7 +355,7 @@ function CampaignDialog({
             {storeOptions.length > 0 && (
               <div className="mb-4">
                 <label className="mb-1.5 block text-xs text-light-grey">
-                  Target Stores (leave empty for all)
+                  Default Stores (leave empty for all)
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {storeOptions.map((s) => (
@@ -384,21 +399,44 @@ function CampaignDialog({
 
             {/* Custom filters */}
             <div>
-              <label className="mb-1.5 block text-xs text-light-grey">
-                Custom User Filters
-              </label>
+              <div className="mb-1.5 flex items-center gap-3">
+                <label className="text-xs text-light-grey">
+                  Custom User Filters
+                </label>
+                {form.filters.length >= 2 && (
+                  <div className="flex rounded-lg border border-border overflow-hidden">
+                    {(["AND", "OR"] as const).map((logic) => (
+                      <button
+                        key={logic}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, filterLogic: logic }))}
+                        className={`px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                          form.filterLogic === logic
+                            ? "bg-primary text-white"
+                            : "text-black hover:bg-soft-grey"
+                        }`}
+                      >
+                        {logic}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="space-y-2">
                 {form.filters.map((row, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="field (e.g. totalTopUp)"
+                    <select
                       value={row.field}
                       onChange={(e) =>
                         setFilterField(idx, "field", e.target.value)
                       }
                       className="flex-1 rounded-lg border border-border px-3 py-2 text-xs text-black outline-none focus:border-primary"
-                    />
+                    >
+                      <option value="">Select field…</option>
+                      {USER_FILTER_FIELDS.map((f) => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
                     <select
                       value={row.operator}
                       onChange={(e) =>
@@ -581,7 +619,7 @@ function CampaignDialog({
               Schedule
             </p>
             <div className="flex flex-wrap gap-4">
-              {(["immediate", "scheduled", "recurring"] as ScheduleMode[]).map(
+              {(["immediate", "scheduled"] as ScheduleMode[]).map(
                 (mode) => (
                   <label
                     key={mode}
@@ -618,29 +656,6 @@ function CampaignDialog({
                 />
               </div>
             )}
-
-            {form.scheduleMode === "recurring" && (
-              <div className="mt-3">
-                <label className="mb-1.5 block text-xs text-light-grey">
-                  Recurrence
-                </label>
-                <select
-                  value={form.recurrence}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      recurrence: e.target.value as CampaignForm["recurrence"],
-                    }))
-                  }
-                  className="rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                >
-                  <option value="">Select…</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-            )}
           </div>
         </div>
 
@@ -658,6 +673,13 @@ function CampaignDialog({
             className="rounded-lg border border-border px-4 py-2 text-sm text-black transition-colors hover:bg-soft-grey disabled:opacity-50"
           >
             Save as Draft
+          </button>
+          <button
+            onClick={onTest}
+            disabled={loading}
+            className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+          >
+            Test
           </button>
           <button
             onClick={onSend}
@@ -775,6 +797,31 @@ export default function NotificationsPage() {
     }
   }
 
+  async function handleTest() {
+    const errs = validateForm(form);
+    if (hasErrors(errs)) {
+      setErrors(errs);
+      toast.error("Please fix the highlighted fields.");
+      return;
+    }
+    if (!user) return;
+
+    setLoading(true);
+    try {
+      const payload = formToPayload({ ...form, name: `[TEST] ${form.name}` }, "draft");
+      await NotificationService.createCampaign(
+        payload as Omit<NotificationCampaign, "docId">,
+        user.uid
+      );
+      toast.success("Test campaign saved as draft.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send test.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     setLoading(true);
@@ -795,7 +842,7 @@ export default function NotificationsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-black">Notifications</h1>
+          <h1 className="text-2xl font-semibold text-black">Campaign</h1>
           <p className="mt-1 text-sm text-light-grey">
             Compose and dispatch campaigns to app users.
           </p>
@@ -955,6 +1002,7 @@ export default function NotificationsPage() {
           storeOptions={stores}
           onClose={closeDialog}
           onSaveDraft={() => handleSave("draft")}
+          onTest={handleTest}
           onSend={() =>
             handleSave(
               form.scheduleMode === "immediate" ? "sent" : "scheduled"

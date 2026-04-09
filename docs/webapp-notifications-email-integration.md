@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Notifications** feature (`notif` collection) drives campaign dispatch across multiple channels. When the `email` channel is selected, the campaign does **not** store the full HTML body itself — it references an **Email Template** document (`emails` collection) and supplies only the runtime variable values. The template's `content` is fetched, variables are resolved, wrapped in the global shell, and sent.
+The **Notifications** feature (`campaigns` collection) drives campaign dispatch across multiple channels. When the `email` channel is selected, the campaign does **not** store the full HTML body itself — it references an **Email Template** document (`emails` collection) and supplies only the runtime variable values. The template's `content` is fetched, variables are resolved, wrapped in the global shell, and sent.
 
 This keeps email design in one place (Email Templates) while campaigns stay lean and reusable.
 
@@ -11,7 +11,7 @@ This keeps email design in one place (Email Templates) while campaigns stay lean
 ## How They Connect
 
 ```
-NotificationCampaign (notif/{id})
+NotificationCampaign (campaigns/{id})
   └─ channels: ["email", ...]
   └─ template.emailTemplateId  ──────────► EmailTemplate (emails/{id})
   └─ template.variables: { ... }               └─ content: "Hi {{ firstName }}..."
@@ -146,7 +146,7 @@ When the `email` channel is toggled on in a campaign:
 1. Per-recipient auto values  (resolved from customers/{uid} at send time)
    firstName, lastName, email, credits, storeName, birthday …
 
-2. Campaign-level static values  (template.variables in the notif document)
+2. Campaign-level static values  (template.variables in the campaigns document)
    amount, promoCode, expiryDate …
 
 3. System values  (injected by the sending service, never stored)
@@ -234,7 +234,7 @@ async function sendEmailCampaign(campaign: NotificationCampaign, recipient: AppU
 }
 ```
 
-### `notif/abc123` campaign document
+### `campaigns/abc123` campaign document
 
 ```json
 {

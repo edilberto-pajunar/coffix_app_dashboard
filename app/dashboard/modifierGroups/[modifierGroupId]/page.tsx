@@ -12,10 +12,11 @@ type DialogMode = "edit-group" | "delete-group" | "add-modifier" | "edit-modifie
 type ModifierForm = {
   label: string;
   priceDelta: string;
+  cost: string;
   isDefault: boolean;
 };
 
-const emptyModifierForm: ModifierForm = { label: "", priceDelta: "0", isDefault: false };
+const emptyModifierForm: ModifierForm = { label: "", priceDelta: "0", cost: "0", isDefault: false };
 
 export default function ModifierGroupDetailPage() {
   const { modifierGroupId } = useParams<{ modifierGroupId: string }>();
@@ -50,6 +51,7 @@ export default function ModifierGroupDetailPage() {
     setModifierForm({
       label: m.label ?? "",
       priceDelta: String(m.priceDelta ?? 0),
+      cost: String(m.cost ?? 0),
       isDefault: m.isDefault ?? false,
     });
     setDialog("edit-modifier");
@@ -110,18 +112,36 @@ export default function ModifierGroupDetailPage() {
     setLoading(true);
     try {
       if (dialog === "add-modifier") {
+        if (modifierForm.isDefault) {
+          await Promise.all(
+            groupModifiers.map((m) =>
+              ProductService.updateModifier(m.docId!, { isDefault: false }),
+            ),
+          );
+        }
         const ref = await ProductService.createModifier({
           label: modifierForm.label,
           priceDelta: parseFloat(modifierForm.priceDelta) || 0,
+          cost: parseFloat(modifierForm.cost) || 0,
           isDefault: modifierForm.isDefault,
           groupId: group.docId,
         });
         await ProductService.addModifierToGroup(group.docId, ref.id);
         toast.success("Modifier added.");
       } else if (activeModifierId) {
+        if (modifierForm.isDefault) {
+          await Promise.all(
+            groupModifiers
+              .filter((m) => m.docId !== activeModifierId)
+              .map((m) =>
+                ProductService.updateModifier(m.docId!, { isDefault: false }),
+              ),
+          );
+        }
         await ProductService.updateModifier(activeModifierId, {
           label: modifierForm.label,
           priceDelta: parseFloat(modifierForm.priceDelta) || 0,
+          cost: parseFloat(modifierForm.cost) || 0,
           isDefault: modifierForm.isDefault,
         });
         toast.success("Modifier updated.");
@@ -189,21 +209,6 @@ export default function ModifierGroupDetailPage() {
         </div>
       </div>
 
-      {/* Info Card */}
-      <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
-        <div className="divide-y divide-border">
-          {[
-            { label: "Name", value: group.name ?? "—" },
-            { label: "Required", value: group.required ? "Yes" : "No" },
-            { label: "Modifiers", value: String(groupModifiers.length) },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between px-4 py-3">
-              <span className="text-xs text-light-grey">{label}</span>
-              <span className="text-sm font-medium text-black capitalize">{value}</span>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Modifiers Section */}
       <div className="space-y-3">
@@ -222,7 +227,8 @@ export default function ModifierGroupDetailPage() {
             <thead>
               <tr className="border-b border-border bg-background">
                 <th className="px-5 py-3 text-left font-medium text-light-grey">Label</th>
-                <th className="px-5 py-3 text-left font-medium text-light-grey">Price Delta</th>
+                <th className="px-5 py-3 text-left font-medium text-light-grey">Price</th>
+                <th className="px-5 py-3 text-left font-medium text-light-grey">Cost</th>
                 <th className="px-5 py-3 text-left font-medium text-light-grey">Default</th>
                 <th className="px-5 py-3 text-right font-medium text-light-grey">Actions</th>
               </tr>
@@ -230,7 +236,7 @@ export default function ModifierGroupDetailPage() {
             <tbody className="divide-y divide-border">
               {groupModifiers.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-10 text-center text-light-grey">
+                  <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
                     No modifiers yet.
                   </td>
                 </tr>
@@ -241,11 +247,14 @@ export default function ModifierGroupDetailPage() {
                     <td className="px-5 py-3 text-primary">
                       {(m.priceDelta ?? 0) >= 0 ? "+" : ""}₱{(m.priceDelta ?? 0).toFixed(2)}
                     </td>
+                    <td className="px-5 py-3 text-black">
+                      ₱{(m.cost ?? 0).toFixed(2)}
+                    </td>
                     <td className="px-5 py-3">
                       {m.isDefault ? (
                         <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-success">Yes</span>
                       ) : (
-                        <span className="rounded-full bg-soft-grey px-2 py-0.5 text-xs text-light-grey">No</span>
+                        <span className="rounded-full px-2 py-0.5 text-xs text-light-grey">No</span>
                       )}
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -307,7 +316,7 @@ export default function ModifierGroupDetailPage() {
                   </label>
                 </div>
                 <div className="mt-5 flex justify-end gap-2">
-                  <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                  <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black ">Cancel</button>
                   <button onClick={handleUpdateGroup} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                     {loading ? "Saving…" : "Save"}
                   </button>
@@ -355,6 +364,15 @@ export default function ModifierGroupDetailPage() {
                       onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: e.target.value }))}
                     />
                   </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-light-grey">Cost (₱)</label>
+                    <input
+                      type="number"
+                      className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                      value={modifierForm.cost}
+                      onChange={(e) => setModifierForm((f) => ({ ...f, cost: e.target.value }))}
+                    />
+                  </div>
                   <label className="flex items-center gap-2 text-sm text-black">
                     <input
                       type="checkbox"
@@ -366,7 +384,7 @@ export default function ModifierGroupDetailPage() {
                   </label>
                 </div>
                 <div className="mt-5 flex justify-end gap-2">
-                  <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                  <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-grey">Cancel</button>
                   <button onClick={handleSaveModifier} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                     {loading ? "Saving…" : "Save"}
                   </button>

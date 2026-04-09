@@ -134,6 +134,9 @@ export default function ProductsPage() {
     else { setSortKey(key); setSortDir("asc"); }
   }
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<NewProductForm>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<keyof NewProductForm, boolean>>>({});
@@ -160,6 +163,67 @@ export default function ProductsPage() {
     });
     return result;
   }, [products, search, selectedCategory, getCategoryName, sortKey, sortDir]);
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.docId ?? ""));
+  const someVisibleSelected = filtered.some((p) => selectedIds.has(p.docId ?? ""));
+
+  function toggleSelectAll() {
+    if (allVisibleSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((p) => next.delete(p.docId ?? ""));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((p) => next.add(p.docId ?? ""));
+        return next;
+      });
+    }
+  }
+
+  function toggleSelectOne(docId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(docId)) next.delete(docId);
+      else next.add(docId);
+      return next;
+    });
+  }
+
+  function handleCopyProduct(product: Product) {
+    setForm({
+      name: `Copy of ${product.name ?? ""}`,
+      imageUrl: product.imageUrl ?? "",
+      price: String(product.price ?? ""),
+      cost: String(product.cost ?? ""),
+      order: String(product.order ?? ""),
+      categoryId: product.categoryId ?? "",
+      modifierGroupIds: product.modifierGroupIds ?? [],
+      availableToStores: product.availableToStores ?? [],
+    });
+    setErrors({});
+    setShowCreate(true);
+  }
+
+  async function handleBulkDisable(disabled: boolean) {
+    setBulkLoading(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          ProductService.updateProduct(id, { disabledPermanently: disabled }),
+        ),
+      );
+      toast.success(disabled ? "Selected products disabled." : "Selected products enabled.");
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update products.");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
 
   function setField<K extends keyof NewProductForm>(key: K, value: NewProductForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -248,76 +312,139 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {/* Bulk action toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-white px-4 py-2.5 shadow-(--shadow)">
+          <span className="text-sm text-light-grey">{selectedIds.size} selected</span>
+          <div className="flex gap-2 ml-auto">
+            <button
+              onClick={() => handleBulkDisable(false)}
+              disabled={bulkLoading}
+              className="rounded-lg bg-success px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+            >
+              Enable
+            </button>
+            <button
+              onClick={() => handleBulkDisable(true)}
+              disabled={bulkLoading}
+              className="rounded-lg bg-error px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+            >
+              Disable
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              disabled={bulkLoading}
+              className="text-xs text-light-grey hover:text-black disabled:opacity-50"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  ref={(el) => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected; }}
+                  onChange={toggleSelectAll}
+                  className="accent-primary"
+                />
+              </th>
               <th
                 onClick={() => toggleSort("name")}
                 className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
               >
-                Product {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+                Product {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
               </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Category</th>
               <th
                 onClick={() => toggleSort("price")}
                 className="cursor-pointer select-none px-5 py-3 text-right font-medium text-light-grey hover:text-black"
               >
-                Price {sortKey === "price" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+                Price {sortKey === "price" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
               </th>
               <th
                 onClick={() => toggleSort("cost")}
                 className="cursor-pointer select-none px-5 py-3 text-right font-medium text-light-grey hover:text-black"
               >
-                Cost {sortKey === "cost" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+                Cost {sortKey === "cost" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
               </th>
+              <th className="w-10 px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
                   No products found.
                 </td>
               </tr>
             ) : (
-              filtered.map((product: Product) => (
-                <tr
-                  key={product.docId}
-                  onClick={() => router.push(`/dashboard/products/${product.docId}`)}
-                  className="cursor-pointer transition-colors hover:bg-background"
-                >
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      {product.imageUrl ? (
-                        <Image
-                          src={product.imageUrl}
-                          width={36}
-                          height={36}
-                          alt={product.name ?? "Product Image"}
-                          className="rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
-                          {(product.name ?? "?")[0].toUpperCase()}
-                        </div>
-                      )}
-                      <span className="font-medium text-black">{product.name ?? "—"}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="rounded-full bg-[#f0f0f0] px-2.5 py-1 text-xs font-medium text-black">
-                      {getCategoryName(product.categoryId)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right font-semibold text-primary">
-                    ${(product.price ?? 0).toFixed(2)}
-                  </td>
-                  <td className="px-5 py-3 text-right text-light-grey">
-                    ${(product.cost ?? 0).toFixed(2)}
-                  </td>
-                </tr>
-              ))
+              filtered.map((product: Product) => {
+                const isSelected = selectedIds.has(product.docId ?? "");
+                return (
+                  <tr
+                    key={product.docId}
+                    onClick={() => router.push(`/dashboard/products/${product.docId}`)}
+                    className={`group cursor-pointer transition-colors hover:bg-background ${isSelected ? "bg-blue-50" : ""} ${product.disabledPermanently ? "opacity-50" : ""}`}
+                  >
+                    <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectOne(product.docId ?? "")}
+                        className="accent-primary"
+                      />
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        {product.imageUrl ? (
+                          <Image
+                            src={product.imageUrl}
+                            width={36}
+                            height={36}
+                            alt={product.name ?? "Product Image"}
+                            className="rounded-lg object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
+                            {(product.name ?? "?")[0].toUpperCase()}
+                          </div>
+                        )}
+                        <span className="font-medium text-black">{product.name ?? "—"}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="rounded-full bg-[#f0f0f0] px-2.5 py-1 text-xs font-medium text-black">
+                        {getCategoryName(product.categoryId)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold text-primary">
+                      ${(product.price ?? 0).toFixed(2)}
+                    </td>
+                    <td className="px-5 py-3 text-right text-light-grey">
+                      ${(product.cost ?? 0).toFixed(2)}
+                    </td>
+                    <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        title="Duplicate product"
+                        onClick={() => handleCopyProduct(product)}
+                        className="opacity-0 group-hover:opacity-100 rounded-lg p-1.5 text-light-grey transition-opacity hover:bg-[#f0f0f0] hover:text-black"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
