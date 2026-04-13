@@ -9,8 +9,8 @@ import { useAuth } from "@/app/lib/AuthContext";
 import { formatDocId } from "@/app/utils/formatting";
 import { renderEmailTemplate } from "@/app/lib/renderEmailTemplate";
 import { sanitizeHtml } from "@/app/lib/sanitize";
-import { RichTextEditor } from "@/app/components/RichTextEditor/RichTextEditor";
 import type { Editor } from "@tiptap/react";
+import { RichTextEditor } from "@/components/components/RichTextEditor/RichTextEditor";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

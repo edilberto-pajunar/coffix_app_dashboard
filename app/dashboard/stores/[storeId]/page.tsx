@@ -349,7 +349,7 @@ export default function StoreDetailPage() {
         </div>
       </div>
 
-      {/* Holiday Hours Card */}
+      {/* Special Operating Hours Card */}
       {(() => {
         const today = new Date().toLocaleDateString("en-CA");
         const entries = Object.entries(store.holidayHours ?? {}).sort(([a], [b]) => a.localeCompare(b));
@@ -360,7 +360,7 @@ export default function StoreDetailPage() {
         return (
           <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="font-semibold text-black">Holiday Hours</h2>
+              <h2 className="font-semibold text-black">Special Operating Hours</h2>
               <button
                 onClick={openAddHoliday}
                 className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
@@ -369,7 +369,7 @@ export default function StoreDetailPage() {
               </button>
             </div>
             {sorted.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-light-grey">No holiday hours set.</p>
+              <p className="px-4 py-6 text-center text-sm text-light-grey">No Special Operating Hours set.</p>
             ) : (
               <div className="divide-y divide-border">
                 {sorted.map(([dateKey, entry]) => {

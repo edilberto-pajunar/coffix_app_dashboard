@@ -10,7 +10,7 @@ import { useAuth } from "@/app/lib/AuthContext";
 import { Product } from "../interface/product";
 import { ProductService } from "../service/ProductService";
 import Image from "next/image";
-
+import { Button } from "@/components/ui/button";
 type DialogMode = "edit-product" | "delete-product" | "add-modifier" | "remove-modifier-group" | null;
 
 function MultiSelect({
@@ -293,23 +293,17 @@ export default function ProductDetailPage() {
                         {/* Product disable — admin only */}
                         <div className="flex items-start justify-between gap-3">
                             <div>
-                                <p className="text-sm font-medium text-black">Product Disabled</p>
-                                <p className="mt-0.5 text-xs text-light-grey">
-                                    Removes this product from all stores. Admin only.
-                                </p>
+                                <p className="text-sm font-medium text-black">Product Availability</p>
                             </div>
                             {isAdmin ? (
-                                <button
+                                <Button
+                                    size="xs"
+                                    variant={isPermanentlyDisabled ? "solid-success" : "solid-error"}
                                     onClick={handleTogglePermanent}
                                     disabled={statusLoading}
-                                    className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50 ${
-                                        isPermanentlyDisabled
-                                            ? "bg-success text-white"
-                                            : "bg-error text-white"
-                                    }`}
                                 >
-                                    {isPermanentlyDisabled ? "Re-enable" : "Disable"}
-                                </button>
+                                    {isPermanentlyDisabled ? "Enable for All Stores" : "Disable for All Stores"}
+                                </Button>
                             ) : (
                                 <span className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                                     isPermanentlyDisabled
@@ -317,7 +311,7 @@ export default function ProductDetailPage() {
                                         : "bg-green-50 text-success"
                                 }`}>
                                     <span className={`h-1.5 w-1.5 rounded-full ${isPermanentlyDisabled ? "bg-error" : "bg-success"}`} />
-                                    {isPermanentlyDisabled ? "Disabled" : "Active"}
+                                    {isPermanentlyDisabled ? "Disable for All Stores" : "Enable for All Stores"}
                                 </span>
                             )}
                         </div>
@@ -325,9 +319,6 @@ export default function ProductDetailPage() {
                         {/* Per-store temporary disable — store_manager (or admin) */}
                         {assignedStoreIds.length > 0 && (
                             <div className="space-y-2">
-                                <p className="text-xs text-light-grey">
-                                    Temporarily disable per store (e.g. out of stock):
-                                </p>
                                 <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                                     {assignedStoreIds.map((storeId) => {
                                         const store = stores.find((s) => s.docId === storeId);
@@ -335,17 +326,15 @@ export default function ProductDetailPage() {
                                         return (
                                             <div key={storeId} className="flex items-center justify-between px-3 py-2.5">
                                                 <span className="text-sm text-black">{store?.name ?? storeId}</span>
-                                                <button
+                                                <Button
+                                                    size="xs"
+                                                    variant={isDisabled ? "solid-error" : "solid-success"}
                                                     onClick={() => handleToggleStoreDisable(storeId)}
                                                     disabled={statusLoading || isPermanentlyDisabled}
-                                                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 ${
-                                                        isDisabled
-                                                            ? "bg-amber-100 text-amber-700"
-                                                            : "bg-green-50 text-success"
-                                                    }`}
+                                                    className="rounded-full"
                                                 >
-                                                    {isDisabled ? "Disabled — tap to re-enable" : "Enabled — tap to disable"}
-                                                </button>
+                                                    {isDisabled ? "Disable for this store" : "Enable for this store"}
+                                                </Button>
                                             </div>
                                         );
                                     })}
@@ -393,9 +382,6 @@ export default function ProductDetailPage() {
                                         </svg>
                                         <div>
                                             <span className="font-medium text-black">{group.name ?? "—"}</span>
-                                            <span className="ml-2 text-xs text-light-grey">
-                                                {group.required ? "Required" : "Optional"}
-                                            </span>
                                         </div>
                                     </div>
                                     <button

@@ -2,11 +2,11 @@
 import { useEffect } from "react";
 import { useDashboardStore } from "@/app/dashboard/products/store/useDashboardStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
-import { useUserStore } from "../dashboard/users/store/useUserStore";
-import { useStaffStore } from "../dashboard/staffs/store/useStaffStore";
-import { useGlobalSettingsStore } from "../dashboard/globalSettings/store/useGlobalSettingsStore";
-import { useNotificationStore } from "../dashboard/notifications/store/useNotificationStore";
-import { useEmailTemplateStore } from "../dashboard/emailTemplates/store/useEmailTemplateStore";
+import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
+import { useStaffStore } from "@/app/dashboard/staffs/store/useStaffStore";
+import { useGlobalSettingsStore } from "@/app/dashboard/globalSettings/store/useGlobalSettingsStore";
+import { useNotificationStore } from "@/app/dashboard/notifications/store/useNotificationStore";
+import { useEmailTemplateStore } from "@/app/dashboard/emailTemplates/store/useEmailTemplateStore";
 
 export function DataInitializer() {
   const listenToAll = useDashboardStore((s) => s.listenToAll);

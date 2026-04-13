@@ -23,6 +23,7 @@ type FormState = {
   GST: string;
   appVersion: string;
   basicDiscount: string;
+  creditExpiryDuration: string;
   discountLevel2: string;
   discountLevel3: string;
   maxDayBetweenLogin: string;
@@ -41,6 +42,7 @@ function settingsToForm(s: GlobalSettings): FormState {
     GST: s.GST?.toString() ?? "",
     appVersion: s.appVersion ?? "",
     basicDiscount: s.basicDiscount?.toString() ?? "",
+    creditExpiryDuration: s.creditExpiryDuration?.toString() ?? "",
     discountLevel2: s.discountLevel2?.toString() ?? "",
     discountLevel3: s.discountLevel3?.toString() ?? "",
     maxDayBetweenLogin: s.maxDayBetweenLogin?.toString() ?? "",
@@ -65,13 +67,15 @@ const NUMERIC_NON_NEGATIVE: (keyof FormState)[] = [
   "topupLevel3",
   "withdrawalFee",
 ];
+const NUMERIC_INTEGER: (keyof FormState)[] = ["creditExpiryDuration"];
 const NUMERIC_POSITIVE: (keyof FormState)[] = ["minCreditToShare", "minTopUp"];
 const URL_FIELDS: (keyof FormState)[] = ["specialUrl", "storeUrl", "tcUrl"];
 
 const FIELD_LABELS: Record<keyof FormState, string> = {
   GST: "GST",
-  appVersion: "App Version",
+  appVersion: "Minimum App Version",
   basicDiscount: "Basic Discount",
+  creditExpiryDuration: "Credit Expiry Duration",
   discountLevel2: "Discount Level 2",
   discountLevel3: "Discount Level 3",
   maxDayBetweenLogin: "Max Days Between Login",
@@ -107,7 +111,16 @@ function validateForm(form: FormState): string[] {
   }
 
   if (form.appVersion && !SEMVER_RE.test(form.appVersion)) {
-    errors.push("App Version: must follow semver format (e.g. 1.0.0)");
+    errors.push("Minimum App Version: must follow semver format (e.g. 1.0.0)");
+  }
+
+  for (const field of NUMERIC_INTEGER) {
+    const v = form[field];
+    if (v === "") continue;
+    const n = Number(v);
+    if (isNaN(n) || n < 0 || !Number.isInteger(n)) {
+      errors.push(`${FIELD_LABELS[field]}: must be a non-negative whole number (days)`);
+    }
   }
 
   for (const field of URL_FIELDS) {
@@ -131,6 +144,9 @@ function formToPayload(form: FormState): Partial<GlobalSettings> {
     const v = form[field];
     if (v !== "") (payload as Record<string, unknown>)[field] = Number(v);
   }
+
+  if (form.creditExpiryDuration !== "")
+    payload.creditExpiryDuration = parseInt(form.creditExpiryDuration, 10);
 
   if (form.appVersion) payload.appVersion = form.appVersion;
   for (const field of URL_FIELDS) {
@@ -220,6 +236,7 @@ const emptyForm: FormState = {
   GST: "",
   appVersion: "",
   basicDiscount: "",
+  creditExpiryDuration: "",
   discountLevel2: "",
   discountLevel3: "",
   maxDayBetweenLogin: "",
@@ -385,6 +402,14 @@ export default function GlobalSettingsPage() {
             placeholder="10"
             suffix="credits"
           />
+          <Field
+            label="Credit Expiry Duration"
+            type="number"
+            value={form.creditExpiryDuration}
+            onChange={setField("creditExpiryDuration")}
+            placeholder="30"
+            suffix="days"
+          />
           {/* <Field
             label="Min Top Up"
             type="number"
@@ -396,7 +421,7 @@ export default function GlobalSettingsPage() {
 
         <Section title="App Config">
           <Field
-            label="App Version"
+            label="Minimum App Version"
             type="text"
             value={form.appVersion}
             onChange={setField("appVersion")}

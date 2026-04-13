@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
@@ -16,16 +16,41 @@ import { Button } from "@/components/ui/button";
 export default function CategoriesPage() {
   const categories = useDashboardStore((s) => s.categories);
 
+  const [orderedCategories, setOrderedCategories] = useState(
+    [...categories].sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999))
+  );
+  const dragIndex = useRef<number | null>(null);
+
+  useEffect(() => {
+    setOrderedCategories(
+      [...categories].sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999))
+    );
+  }, [categories]);
+
   const [categoryDialog, setCategoryDialog] = useState<"create" | "edit" | "delete" | null>(null);
-  const [categoryForm, setCategoryForm] = useState({ name: "", order: "" });
+  const [categoryForm, setCategoryForm] = useState({ name: "" });
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [categoryErrors, setCategoryErrors] = useState<{ name?: boolean }>({});
   const [categoryLoading, setCategoryLoading] = useState(false);
 
-  function openEdit(docId: string, name: string, order?: string) {
+  function openEdit(docId: string, name: string) {
     setActiveCategoryId(docId);
-    setCategoryForm({ name: name ?? "", order: order != null ? String(order) : "" });
+    setCategoryForm({ name: name ?? "" });
     setCategoryDialog("edit");
+  }
+
+  async function handleDrop(dropIndex: number) {
+    if (dragIndex.current === null || dragIndex.current === dropIndex) return;
+    const reordered = [...orderedCategories];
+    const [moved] = reordered.splice(dragIndex.current, 1);
+    reordered.splice(dropIndex, 0, moved);
+    dragIndex.current = null;
+    setOrderedCategories(reordered);
+    await Promise.all(
+      reordered.map((cat, i) =>
+        ProductService.updateCategory(cat.docId!, { order: String(i + 1) })
+      )
+    );
   }
 
   async function handleSaveCategory() {
@@ -36,10 +61,7 @@ export default function CategoriesPage() {
     setCategoryErrors({});
     setCategoryLoading(true);
     try {
-      const data = {
-        name: categoryForm.name.trim(),
-        ...(categoryForm.order !== "" ? { order: categoryForm.order } : {}),
-      };
+      const data = { name: categoryForm.name.trim() };
       if (categoryDialog === "create") {
         await ProductService.createCategory(data);
       } else if (categoryDialog === "edit" && activeCategoryId) {
@@ -47,7 +69,7 @@ export default function CategoriesPage() {
       }
       toast.success(categoryDialog === "create" ? "Category created." : "Category updated.");
       setCategoryDialog(null);
-      setCategoryForm({ name: "", order: "" });
+      setCategoryForm({ name: "" });
       setActiveCategoryId(null);
     } catch (err) {
       console.error(err);
@@ -84,7 +106,7 @@ export default function CategoriesPage() {
         </div>
         <Button
           onClick={() => {
-            setCategoryForm({ name: "", order: "" });
+            setCategoryForm({ name: "" });
             setCategoryDialog("create");
           }}
         >
@@ -97,32 +119,45 @@ export default function CategoriesPage() {
           <thead>
             <tr className="border-b border-border bg-background">
               <th className="px-5 py-3 text-left font-medium text-light-grey">Name</th>
-              <th className="px-5 py-3 text-right font-medium text-light-grey">Order</th>
               <th className="px-5 py-3 text-right font-medium text-light-grey">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {categories.length === 0 ? (
+            {orderedCategories.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={2} className="px-5 py-10 text-center text-light-grey">
                   No categories yet.
                 </td>
               </tr>
             ) : (
-              categories.map((c) => (
+              orderedCategories.map((c, i) => (
                 <tr
                   key={c.docId}
-                  onClick={() => openEdit(c.docId ?? "", c.name ?? "", c.order)}
-                  className="cursor-pointer transition-colors hover:bg-background"
+                  draggable
+                  onDragStart={() => { dragIndex.current = i; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleDrop(i)}
+                  className="transition-colors hover:bg-background"
                 >
-                  <td className="px-5 py-3 font-medium text-black">{c.name ?? "—"}</td>
-                  <td className="px-5 py-3 text-right text-light-grey">{c.order ?? "—"}</td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <svg className="h-4 w-4 shrink-0 cursor-grab text-light-grey active:cursor-grabbing" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="5.5" cy="3.5" r="1.25" />
+                        <circle cx="10.5" cy="3.5" r="1.25" />
+                        <circle cx="5.5" cy="8" r="1.25" />
+                        <circle cx="10.5" cy="8" r="1.25" />
+                        <circle cx="5.5" cy="12.5" r="1.25" />
+                        <circle cx="10.5" cy="12.5" r="1.25" />
+                      </svg>
+                      <span className="font-medium text-black">{c.name ?? "—"}</span>
+                    </div>
+                  </td>
                   <td className="px-5 py-3 text-right">
-                    <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-end gap-1">
                       <Button
                         variant="outline"
                         size="xs"
-                        onClick={() => openEdit(c.docId ?? "", c.name ?? "", c.order)}
+                        onClick={() => openEdit(c.docId ?? "", c.name ?? "")}
                       >
                         Edit
                       </Button>
@@ -152,6 +187,7 @@ export default function CategoriesPage() {
           if (!open) {
             setCategoryDialog(null);
             setCategoryErrors({});
+            setCategoryForm({ name: "" });
           }
         }}
       >
@@ -177,17 +213,6 @@ export default function CategoriesPage() {
               {categoryErrors.name && (
                 <p className="mt-1 text-xs text-error">Name is required.</p>
               )}
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs text-light-grey">Order</label>
-              <input
-                type="number"
-                min={0}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                placeholder="0"
-                value={categoryForm.order}
-                onChange={(e) => setCategoryForm((f) => ({ ...f, order: e.target.value }))}
-              />
             </div>
           </div>
 

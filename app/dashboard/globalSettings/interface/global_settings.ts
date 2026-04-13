@@ -13,4 +13,5 @@ export interface GlobalSettings {
   topupLevel2?: number;
   topupLevel3?: number;
   withdrawalFee?: number;
+  creditExpiryDuration?: number;
 }

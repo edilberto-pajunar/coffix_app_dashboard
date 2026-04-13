@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useDashboardStore } from "../../products/store/useDashboardStore";
 import { Modifier } from "../../products/interface/modifier";
 import { ProductService } from "../../products/service/ProductService";
+import { formatCurrencyInput, stripCurrencySymbol } from "@/app/utils/formatting";
 
 type DialogMode = "edit-group" | "delete-group" | "add-modifier" | "edit-modifier" | "delete-modifier" | null;
 
@@ -16,7 +17,7 @@ type ModifierForm = {
   isDefault: boolean;
 };
 
-const emptyModifierForm: ModifierForm = { label: "", priceDelta: "0", cost: "0", isDefault: false };
+const emptyModifierForm: ModifierForm = { label: "", priceDelta: "$0.00", cost: "$0.00", isDefault: false };
 
 export default function ModifierGroupDetailPage() {
   const { modifierGroupId } = useParams<{ modifierGroupId: string }>();
@@ -50,8 +51,8 @@ export default function ModifierGroupDetailPage() {
     setActiveModifierId(m.docId ?? null);
     setModifierForm({
       label: m.label ?? "",
-      priceDelta: String(m.priceDelta ?? 0),
-      cost: String(m.cost ?? 0),
+      priceDelta: formatCurrencyInput(String(m.priceDelta ?? 0)),
+      cost: formatCurrencyInput(String(m.cost ?? 0)),
       isDefault: m.isDefault ?? false,
     });
     setDialog("edit-modifier");
@@ -121,8 +122,8 @@ export default function ModifierGroupDetailPage() {
         }
         const ref = await ProductService.createModifier({
           label: modifierForm.label,
-          priceDelta: parseFloat(modifierForm.priceDelta) || 0,
-          cost: parseFloat(modifierForm.cost) || 0,
+          priceDelta: parseFloat(stripCurrencySymbol(modifierForm.priceDelta)) || 0,
+          cost: parseFloat(stripCurrencySymbol(modifierForm.cost)) || 0,
           isDefault: modifierForm.isDefault,
           groupId: group.docId,
         });
@@ -140,8 +141,8 @@ export default function ModifierGroupDetailPage() {
         }
         await ProductService.updateModifier(activeModifierId, {
           label: modifierForm.label,
-          priceDelta: parseFloat(modifierForm.priceDelta) || 0,
-          cost: parseFloat(modifierForm.cost) || 0,
+          priceDelta: parseFloat(stripCurrencySymbol(modifierForm.priceDelta)) || 0,
+          cost: parseFloat(stripCurrencySymbol(modifierForm.cost)) || 0,
           isDefault: modifierForm.isDefault,
         });
         toast.success("Modifier updated.");
@@ -245,10 +246,10 @@ export default function ModifierGroupDetailPage() {
                   <tr key={m.docId} className="transition-colors hover:bg-background">
                     <td className="px-5 py-3 font-medium text-black">{m.label ?? "—"}</td>
                     <td className="px-5 py-3 text-primary">
-                      {(m.priceDelta ?? 0) >= 0 ? "+" : ""}₱{(m.priceDelta ?? 0).toFixed(2)}
+                      {Math.abs(m.priceDelta ?? 0).toFixed(2)}
                     </td>
                     <td className="px-5 py-3 text-black">
-                      ₱{(m.cost ?? 0).toFixed(2)}
+                      ${(m.cost ?? 0).toFixed(2)}
                     </td>
                     <td className="px-5 py-3">
                       {m.isDefault ? (
@@ -356,22 +357,32 @@ export default function ModifierGroupDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-light-grey">Price Delta (₱)</label>
-                    <input
-                      type="number"
-                      className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                      value={modifierForm.priceDelta}
-                      onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: e.target.value }))}
-                    />
+                    <label className="mb-1 block text-xs text-light-grey">Price</label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-light-grey">$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="w-full rounded-lg border border-border py-2 pl-7 pr-3 text-sm text-black outline-none focus:border-primary"
+                        value={modifierForm.priceDelta}
+                        onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: stripCurrencySymbol(e.target.value) }))}
+                        onBlur={(e) => setModifierForm((f) => ({ ...f, priceDelta: formatCurrencyInput(e.target.value) }))}
+                      />
+                    </div>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-light-grey">Cost (₱)</label>
-                    <input
-                      type="number"
-                      className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                      value={modifierForm.cost}
-                      onChange={(e) => setModifierForm((f) => ({ ...f, cost: e.target.value }))}
-                    />
+                    <label className="mb-1 block text-xs text-light-grey">Cost</label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-light-grey">$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="w-full rounded-lg border border-border py-2 pl-7 pr-3 text-sm text-black outline-none focus:border-primary"
+                        value={modifierForm.cost}
+                        onChange={(e) => setModifierForm((f) => ({ ...f, cost: stripCurrencySymbol(e.target.value) }))}
+                        onBlur={(e) => setModifierForm((f) => ({ ...f, cost: formatCurrencyInput(e.target.value) }))}
+                      />
+                    </div>
                   </div>
                   <label className="flex items-center gap-2 text-sm text-black">
                     <input

@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useStoreStore } from "./store/useStoreStore";
 import { isStoreOpenAt, DayHours } from "./interface/store";
 import { StoreService } from "./service/StoreService";
+import { Button } from "@/components/ui/button";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 type Day = typeof DAYS[number];
@@ -272,30 +273,23 @@ export default function StoresPage() {
                     </td>
                     <td className="px-5 py-3 text-black">{store.printerId ?? "—"}</td>
                     <td className="px-5 py-3">
-                      {isDisabled ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
-                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                          Disabled
-                        </span>
-                      ) : isOpen ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-success">
-                          <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                          Open
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
-                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                          Closed
-                        </span>
-                      )}
+                      <Button
+                        size="xs"
+                        variant={isDisabled ? "secondary" : isOpen ? "solid-success" : "destructive"}
+                        className="rounded-full pointer-events-none"
+                      >
+                        {isDisabled ? "Disabled" : isOpen ? "Open" : "Closed"}
+                      </Button>
                     </td>
                     <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isDisabled}
-                        onChange={() => StoreService.updateStore(store.docId, { disable: !isDisabled })}
-                        className="accent-primary h-4 w-4 cursor-pointer"
-                      />
+                      <Button
+                        size="xs"
+                        variant={isDisabled ? "solid-error" : "solid-success"}
+                        onClick={() => StoreService.updateStore(store.docId, { disable: !isDisabled })}
+                        className="rounded-full"
+                      >
+                        {isDisabled ? "Disabled" : "Enabled"}
+                      </Button>
                     </td>
                   </tr>
                 );

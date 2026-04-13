@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sidebar, MobileNav } from "../components/Sidebar";
-import { DataInitializer } from "../components/DataInitializer";
 import { useAuth } from "@/app/lib/AuthContext";
+import { DataInitializer } from "@/components/components/DataInitializer";
+import { MobileNav, Sidebar } from "@/components/components/Sidebar";
 
 export default function DashboardLayout({
   children,
