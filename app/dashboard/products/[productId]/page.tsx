@@ -92,9 +92,6 @@ export default function ProductDetailPage() {
 
     // ── Status helpers ──────────────────────────────────────────────────────────
 
-    // Permanent disable: admin only, applies globally
-    const isPermanentlyDisabled = product?.disabledPermanently ?? false;
-
     // Temporary disable per store: store_manager can toggle for their assigned stores
     // Admin sees all; store_manager sees only their assigned stores
     const assignedStoreIds = isAdmin
@@ -105,17 +102,24 @@ export default function ProductDetailPage() {
 
     const disabledStores = product?.disabledStores ?? [];
 
-    async function handleTogglePermanent() {
+    // All assigned stores are disabled
+    const isAllDisabled =
+        assignedStoreIds.length > 0 &&
+        assignedStoreIds.every((id) => disabledStores.includes(id));
+
+    async function handleToggleAllStores() {
         if (!product?.docId) return;
         setStatusLoading(true);
         try {
-            await ProductService.updateProduct(product.docId, {
-                disabledPermanently: !isPermanentlyDisabled,
-            });
+            const allStoreIds = product?.availableToStores ?? [];
+            const updated = isAllDisabled
+                ? disabledStores.filter((id) => !allStoreIds.includes(id))
+                : [...new Set([...disabledStores, ...allStoreIds])];
+            await ProductService.updateProduct(product.docId, { disabledStores: updated });
             toast.success(
-                isPermanentlyDisabled
-                    ? "Product re-enabled permanently."
-                    : "Product permanently disabled.",
+                isAllDisabled
+                    ? "Product enabled for all stores."
+                    : "Product disabled for all stores.",
             );
         } catch (err) {
             console.error(err);
@@ -298,20 +302,20 @@ export default function ProductDetailPage() {
                             {isAdmin ? (
                                 <Button
                                     size="xs"
-                                    variant={isPermanentlyDisabled ? "solid-success" : "solid-error"}
-                                    onClick={handleTogglePermanent}
+                                    variant={isAllDisabled ? "solid-success" : "solid-error"}
+                                    onClick={handleToggleAllStores}
                                     disabled={statusLoading}
                                 >
-                                    {isPermanentlyDisabled ? "Enable for All Stores" : "Disable for All Stores"}
+                                    {isAllDisabled ? "Click to enable for All Stores" : "Click to disable for All Stores"}
                                 </Button>
                             ) : (
                                 <span className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                                    isPermanentlyDisabled
+                                    isAllDisabled
                                         ? "bg-red-50 text-error"
                                         : "bg-green-50 text-success"
                                 }`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full ${isPermanentlyDisabled ? "bg-error" : "bg-success"}`} />
-                                    {isPermanentlyDisabled ? "Disable for All Stores" : "Enable for All Stores"}
+                                    <span className={`h-1.5 w-1.5 rounded-full ${isAllDisabled ? "bg-error" : "bg-success"}`} />
+                                    {isAllDisabled ? "Disabled for All Stores" : "Enabled for All Stores"}
                                 </span>
                             )}
                         </div>
@@ -328,12 +332,12 @@ export default function ProductDetailPage() {
                                                 <span className="text-sm text-black">{store?.name ?? storeId}</span>
                                                 <Button
                                                     size="xs"
-                                                    variant={isPermanentlyDisabled || isDisabled ? "solid-error" : "solid-success"}
+                                                    variant={isDisabled ? "solid-error" : "solid-success"}
                                                     onClick={() => handleToggleStoreDisable(storeId)}
                                                     disabled={statusLoading}
-                                                    className={`rounded-full ${isPermanentlyDisabled ? "pointer-events-none" : ""}`}
+                                                    className="rounded-full"
                                                 >
-                                                    {isPermanentlyDisabled || isDisabled ? "Disabled for this store" : "Enable for this store"}
+                                                    {isDisabled ? "Click to enable for this Store" : "Click to disable for this Store"}
                                                 </Button>
                                             </div>
                                         );

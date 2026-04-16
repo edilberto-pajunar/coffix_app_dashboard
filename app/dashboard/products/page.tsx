@@ -211,9 +211,13 @@ export default function ProductsPage() {
     setBulkLoading(true);
     try {
       await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          ProductService.updateProduct(id, { disabledPermanently: disabled }),
-        ),
+        Array.from(selectedIds).map((id) => {
+          const product = products.find((p) => p.docId === id);
+          const disabledStores = disabled
+            ? (product?.availableToStores ?? [])
+            : [];
+          return ProductService.updateProduct(id, { disabledStores });
+        }),
       );
       toast.success(disabled ? "Selected products disabled." : "Selected products enabled.");
       setSelectedIds(new Set());
@@ -391,7 +395,7 @@ export default function ProductsPage() {
                   <tr
                     key={product.docId}
                     onClick={() => router.push(`/dashboard/products/${product.docId}`)}
-                    className={`group cursor-pointer transition-colors hover:bg-background ${isSelected ? "bg-blue-50" : ""} ${product.disabledPermanently ? "opacity-50" : ""}`}
+                    className={`group cursor-pointer transition-colors hover:bg-background ${isSelected ? "bg-blue-50" : ""} ${(product.availableToStores ?? []).length > 0 && (product.availableToStores ?? []).every((id) => (product.disabledStores ?? []).includes(id)) ? "opacity-50" : ""}`}
                   >
                     <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <input
