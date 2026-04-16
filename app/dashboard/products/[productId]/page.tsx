@@ -328,12 +328,12 @@ export default function ProductDetailPage() {
                                                 <span className="text-sm text-black">{store?.name ?? storeId}</span>
                                                 <Button
                                                     size="xs"
-                                                    variant={isDisabled ? "solid-error" : "solid-success"}
+                                                    variant={isPermanentlyDisabled || isDisabled ? "solid-error" : "solid-success"}
                                                     onClick={() => handleToggleStoreDisable(storeId)}
-                                                    disabled={statusLoading || isPermanentlyDisabled}
-                                                    className="rounded-full"
+                                                    disabled={statusLoading}
+                                                    className={`rounded-full ${isPermanentlyDisabled ? "pointer-events-none" : ""}`}
                                                 >
-                                                    {isDisabled ? "Disable for this store" : "Enable for this store"}
+                                                    {isPermanentlyDisabled || isDisabled ? "Disabled for this store" : "Enable for this store"}
                                                 </Button>
                                             </div>
                                         );

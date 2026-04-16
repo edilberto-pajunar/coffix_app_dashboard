@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
+
 import { useNotificationStore } from "./store/useNotificationStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 import { useStaffStore } from "@/app/dashboard/staffs/store/useStaffStore";
@@ -173,7 +174,7 @@ function formatSchedule(campaign: NotificationCampaign): string {
 }
 
 const STATUS_STYLES: Record<CampaignStatus, string> = {
-  draft: "bg-soft-grey text-light-grey",
+  draft: "text-light-grey",
   scheduled: "bg-blue-100 text-blue-700",
   sent: "bg-green-100 text-green-700",
   cancelled: "bg-red-100 text-red-600",
@@ -838,19 +839,19 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-black">Campaign</h1>
+          <h1 className="text-2xl font-semibold text-black">Campaigns</h1>
           <p className="mt-1 text-sm text-light-grey">
-            Compose and dispatch campaigns to app users.
+            {campaigns.length} campaign{campaigns.length !== 1 ? "s" : ""} total
           </p>
         </div>
         {isAdmin && (
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80"
           >
             <Plus size={15} />
             New Campaign
@@ -871,7 +872,7 @@ export default function NotificationsPage() {
             <button
               key={v}
               onClick={() => setStatusFilter(v)}
-              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === v ? "border-primary bg-primary text-white" : "border-border text-black hover:bg-soft-grey"}`}
+              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === v ? "border-primary bg-primary text-white" : "border-border text-black "}`}
             >
               {v === "All" ? "All Statuses" : v}
             </button>
@@ -882,7 +883,7 @@ export default function NotificationsPage() {
             <button
               key={v}
               onClick={() => setChannelFilter(v)}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${channelFilter === v ? "border-primary bg-primary text-white" : "border-border text-black hover:bg-soft-grey"}`}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${channelFilter === v ? "border-primary bg-primary text-white" : "border-border text-black "}`}
             >
               {v === "All" ? "All Channels" : CHANNEL_LABELS[v as NotificationChannel]}
             </button>
@@ -891,105 +892,92 @@ export default function NotificationsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-border bg-white shadow-(--shadow)">
-        {displayed.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-light-grey">
-            <p className="text-sm">No campaigns yet.</p>
-            {isAdmin && campaigns.length === 0 && (
-              <button
-                onClick={openCreate}
-                className="mt-3 text-sm text-primary underline-offset-2 hover:underline"
+      <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-background">
+              <th
+                onClick={() => toggleSort("name")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
               >
-                Create your first campaign
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-light-grey">
-                  <th
-                    onClick={() => toggleSort("name")}
-                    className="cursor-pointer select-none px-4 py-3 font-medium hover:text-black"
-                  >
-                    Name {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
-                  </th>
-                  <th className="px-4 py-3 font-medium">Channels</th>
-                  <th
-                    onClick={() => toggleSort("status")}
-                    className="cursor-pointer select-none px-4 py-3 font-medium hover:text-black"
-                  >
-                    Status {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
-                  </th>
-                  <th
-                    onClick={() => toggleSort("schedule")}
-                    className="cursor-pointer select-none px-4 py-3 font-medium hover:text-black"
-                  >
-                    Schedule {sortKey === "schedule" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
-                  </th>
+                Name {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Channels</th>
+              <th
+                onClick={() => toggleSort("status")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Status {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
+              <th
+                onClick={() => toggleSort("schedule")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Schedule {sortKey === "schedule" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
+              {isAdmin && (
+                <th className="px-5 py-3 text-right font-medium text-light-grey">Actions</th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {displayed.length === 0 ? (
+              <tr>
+                <td colSpan={isAdmin ? 5 : 4} className="px-5 py-10 text-center text-light-grey">
+                  No campaigns found.
+                </td>
+              </tr>
+            ) : (
+              displayed.map((c) => (
+                <tr key={c.docId} className="transition-colors hover:bg-background">
+                  <td className="px-5 py-3 font-medium text-black">
+                    {c.name}
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {c.channels?.length > 0 ? c.channels.map((ch) => (
+                        <span
+                          key={ch}
+                          className="rounded-full px-2 py-0.5 text-xs"
+                        >
+                          {CHANNEL_LABELS[ch]}
+                        </span>
+                      )) : "All"}
+                    </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[c.status]}`}
+                    >
+                      {c.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-light-grey">
+                    {formatSchedule(c)}
+                  </td>
                   {isAdmin && (
-                    <th className="px-4 py-3 font-medium">Actions</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {displayed.map((c) => (
-                  <tr
-                    key={c.docId}
-                    className="border-b border-border last:border-0 hover:bg-soft-grey/40"
-                  >
-                    <td className="px-4 py-3 font-medium text-black">
-                      {c.name}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {c.channels?.length > 0 ? c.channels.map((ch) => (
-                          <span
-                            key={ch}
-                            className="rounded-full bg-soft-grey px-2 py-0.5 text-xs text-black"
-                          >
-                            {CHANNEL_LABELS[ch]}
-                          </span>
-                        )) : "All"}
+                    <td className="px-5 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEdit(c)}
+                          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-black transition-colors hover:border-primary hover:text-primary"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(c)}
+                          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-error transition-colors hover:border-error hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[c.status]}`}
-                      >
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-light-grey">
-                      {formatSchedule(c)}
-                    </td>
-                    {isAdmin && (
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openEdit(c)}
-                            className="rounded-lg p-1.5 text-light-grey transition-colors hover:bg-soft-grey"
-                            title="Edit"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(c)}
-                            className="rounded-lg p-1.5 text-light-grey transition-colors hover:bg-red-50 hover:text-red-500"
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       {/* Create / Edit dialog */}

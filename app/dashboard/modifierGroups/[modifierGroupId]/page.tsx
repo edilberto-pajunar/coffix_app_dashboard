@@ -246,7 +246,7 @@ export default function ModifierGroupDetailPage() {
                   <tr key={m.docId} className="transition-colors hover:bg-background">
                     <td className="px-5 py-3 font-medium text-black">{m.label ?? "—"}</td>
                     <td className="px-5 py-3 text-primary">
-                      {Math.abs(m.priceDelta ?? 0).toFixed(2)}
+                      ${Math.abs(m.priceDelta ?? 0).toFixed(2)}
                     </td>
                     <td className="px-5 py-3 text-black">
                       ${(m.cost ?? 0).toFixed(2)}

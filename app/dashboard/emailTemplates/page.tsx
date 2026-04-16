@@ -7,10 +7,12 @@ import { EmailTemplateService } from "./service/EmailTemplateService";
 import { EmailTemplate } from "./interface/emailTemplate";
 import { useAuth } from "@/app/lib/AuthContext";
 import { formatDocId } from "@/app/utils/formatting";
+import { Button } from "@/components/ui/button";
 import { renderEmailTemplate } from "@/app/lib/renderEmailTemplate";
 import { sanitizeHtml } from "@/app/lib/sanitize";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor } from "@/components/components/RichTextEditor/RichTextEditor";
+import { EMAIL_VARIABLE_GROUPS } from "./constants/emailVariables";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -22,16 +24,20 @@ function extractTokens(content: string): string[] {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TemplateForm = { name: string; content: string; notes: string };
-type TemplateFormErrors = { name?: boolean; content?: boolean };
-const emptyForm: TemplateForm = { name: "", content: "", notes: "" };
+type TemplateForm = { name: string; subject: string; content: string; notes: string };
+type TemplateFormErrors = { name?: boolean; subject?: boolean; content?: boolean };
+const emptyForm: TemplateForm = { name: "", subject: "", content: "", notes: "" };
 
 function validateForm(form: TemplateForm): TemplateFormErrors {
   const emptyContent =
     !form.content.trim() ||
     form.content === "<p></p>" ||
     form.content === "<p><br></p>";
-  return { name: !form.name.trim(), content: emptyContent };
+  return {
+    name: !form.name.trim(),
+    subject: !form.subject.trim(),
+    content: emptyContent,
+  };
 }
 function hasErrors(e: TemplateFormErrors) { return Object.values(e).some(Boolean); }
 
@@ -55,7 +61,7 @@ function VariableChips({ variables, content, editor }: VariableChipsProps) {
       <div className="flex flex-wrap gap-1.5 p-3">
         {variables.length === 0 ? (
           <p className="text-xs text-light-grey">
-            No variables defined for this template. A developer can add them directly in Firestore.
+            No variables available for this group.
           </p>
         ) : (
           variables.map((varName) => {
@@ -68,7 +74,7 @@ function VariableChips({ variables, content, editor }: VariableChipsProps) {
                 onClick={() => insertVariable(varName)}
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-70 bg-primary/10 text-primary border-primary/20 ${used ? "opacity-60" : ""}`}
               >
-                {`{{ ${varName} }}`}
+                {varName}
                 {used && <span className="ml-0.5 text-[10px] opacity-70">✓</span>}
               </button>
             );
@@ -93,17 +99,17 @@ type TemplateDialogProps = {
   errors: TemplateFormErrors;
   loading: boolean;
   isEdit: boolean;
-  variables: string[];
   onClose: () => void;
   onSubmit: () => void;
   onChangeName: (v: string) => void;
+  onChangeSubject: (v: string) => void;
   onChangeContent: (v: string) => void;
   onChangeNotes: (v: string) => void;
 };
 
 function TemplateDialog({
-  title, form, errors, loading, isEdit, variables,
-  onClose, onSubmit, onChangeName, onChangeContent, onChangeNotes,
+  title, form, errors, loading, isEdit,
+  onClose, onSubmit, onChangeName, onChangeSubject, onChangeContent, onChangeNotes,
 }: TemplateDialogProps) {
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
 
@@ -147,23 +153,47 @@ function TemplateDialog({
             )}
           </div>
 
+          {/* Subject */}
+          <div>
+            <label className="mb-1.5 block text-xs text-light-grey">Subject *</label>
+            <input
+              type="text"
+              value={form.subject}
+              onChange={(e) => onChangeSubject(e.target.value)}
+              placeholder="e.g. Welcome to Coffix!"
+              className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${
+                errors.subject ? "border-error" : "border-border"
+              }`}
+            />
+            {errors.subject && (
+              <p className="mt-1 text-xs text-error">Subject is required.</p>
+            )}
+          </div>
+
           {/* Content */}
           <div className="space-y-2">
             <label className="block text-xs text-light-grey">Content (HTML) *</label>
 
-            {/* Variable chips */}
-            <VariableChips
-              variables={variables}
-              content={form.content}
-              editor={editorInstance}
-            />
+            {/* Variable groups */}
+            <div className="space-y-3">
+              {EMAIL_VARIABLE_GROUPS.map((group) => (
+                <div key={group.key}>
+                  <p className="mb-1.5 text-xs font-medium text-light-grey">{group.label}</p>
+                  <VariableChips
+                    variables={group.variables}
+                    content={form.content}
+                    editor={editorInstance}
+                  />
+                </div>
+              ))}
+            </div>
 
             <RichTextEditor
               key={isEdit ? "edit" : "new"}
               value={form.content}
               onChange={onChangeContent}
               hasError={!!errors.content}
-              placeholder="Hi {{ firstName }}, …"
+              placeholder="Hi {{ first_name }}, …"
               onEditorReady={setEditorInstance}
             />
 
@@ -188,21 +218,14 @@ function TemplateDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
-          >
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={onSubmit}
-            disabled={loading}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
-          >
+          </Button>
+          <Button onClick={onSubmit} disabled={loading}>
             {loading
               ? isEdit ? "Saving…" : "Creating…"
               : isEdit ? "Save Changes" : "Create Template"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -314,7 +337,12 @@ export default function EmailTemplatesPage() {
     setCreateLoading(true);
     try {
       await EmailTemplateService.createTemplate(
-        { name: createForm.name.trim(), content: createForm.content.trim(), ...(createForm.notes.trim() ? { notes: createForm.notes.trim() } : {}) },
+        {
+          name: createForm.name.trim(),
+          subject: createForm.subject.trim(),
+          content: createForm.content.trim(),
+          ...(createForm.notes.trim() ? { notes: createForm.notes.trim() } : {}),
+        },
         user?.uid ?? ""
       );
       toast.success("Template created.");
@@ -330,7 +358,12 @@ export default function EmailTemplatesPage() {
   // ── Edit
   function openEdit(template: EmailTemplate) {
     setEditTarget(template);
-    setEditForm({ name: template.name, content: template.content, notes: template.notes ?? "" });
+    setEditForm({
+      name: template.name,
+      subject: template.subject ?? "",
+      content: template.content,
+      notes: template.notes ?? "",
+    });
     setEditErrors({});
   }
   function closeEdit() {
@@ -346,7 +379,11 @@ export default function EmailTemplatesPage() {
     try {
       await EmailTemplateService.updateTemplate(
         editTarget.docId,
-        { content: editForm.content.trim(), notes: editForm.notes.trim() || "" },
+        {
+          subject: editForm.subject.trim(),
+          content: editForm.content.trim(),
+          notes: editForm.notes.trim() || "",
+        },
         user?.uid ?? ""
       );
       toast.success("Template updated.");
@@ -373,9 +410,8 @@ export default function EmailTemplatesPage() {
 
   // ── Preview
   function openPreview(template: EmailTemplate) {
-    const sampleVars = Object.fromEntries(
-      (template.variables ?? []).map((v) => [v, `[${v}]`])
-    );
+    const tokens = extractTokens(template.content);
+    const sampleVars = Object.fromEntries(tokens.map((v) => [v, `[${v}]`]));
     setPreviewHtml(sanitizeHtml(renderEmailTemplate(template.content, sampleVars)));
   }
 
@@ -418,8 +454,7 @@ export default function EmailTemplatesPage() {
               >
                 Name {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
               </th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Doc ID</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Variables</th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Subject</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Notes</th>
               <th
                 onClick={() => toggleSort("updatedAt")}
@@ -441,22 +476,12 @@ export default function EmailTemplatesPage() {
               displayed.map((template) => (
                 <tr key={template.docId} className="transition-colors hover:bg-background">
                   <td className="px-5 py-3 font-medium text-black">{template.name}</td>
-                  <td className="px-5 py-3 font-mono text-xs text-light-grey">{template.docId}</td>
-                  <td className="px-5 py-3">
-                    {template.variables && template.variables.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {template.variables.map((v) => (
-                          <span
-                            key={v}
-                            className="inline-block rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
-                          >
-                            {`{{ ${v} }}`}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-light-grey">—</span>
-                    )}
+                  <td className="px-5 py-3 text-black">
+                    {template.subject
+                      ? template.subject.length > 60
+                        ? template.subject.slice(0, 60) + "…"
+                        : template.subject
+                      : "—"}
                   </td>
                   <td className="px-5 py-3 text-black">
                     {template.notes
@@ -505,10 +530,10 @@ export default function EmailTemplatesPage() {
           errors={createErrors}
           loading={createLoading}
           isEdit={false}
-          variables={[]}
           onClose={closeCreate}
           onSubmit={handleCreate}
           onChangeName={(v) => { setCreateForm((f) => ({ ...f, name: v })); setCreateErrors((e) => ({ ...e, name: false })); }}
+          onChangeSubject={(v) => { setCreateForm((f) => ({ ...f, subject: v })); setCreateErrors((e) => ({ ...e, subject: false })); }}
           onChangeContent={(v) => { setCreateForm((f) => ({ ...f, content: v })); setCreateErrors((e) => ({ ...e, content: false })); }}
           onChangeNotes={(v) => setCreateForm((f) => ({ ...f, notes: v }))}
         />
@@ -522,10 +547,10 @@ export default function EmailTemplatesPage() {
           errors={editErrors}
           loading={editLoading}
           isEdit={true}
-          variables={editTarget.variables ?? []}
           onClose={closeEdit}
           onSubmit={handleUpdate}
           onChangeName={() => {}}
+          onChangeSubject={(v) => { setEditForm((f) => ({ ...f, subject: v })); setEditErrors((e) => ({ ...e, subject: false })); }}
           onChangeContent={(v) => { setEditForm((f) => ({ ...f, content: v })); setEditErrors((e) => ({ ...e, content: false })); }}
           onChangeNotes={(v) => setEditForm((f) => ({ ...f, notes: v }))}
         />
