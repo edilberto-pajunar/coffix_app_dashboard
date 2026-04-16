@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { toast } from "sonner";
+import Link from "next/link";
 import { useAuth } from "@/app/lib/AuthContext";
 import { auth } from "../lib/firebase";
 
@@ -73,10 +74,18 @@ export default function LoginPage() {
               disabled={submitting}
             />
           </div>
+          <div className="flex justify-end">
+            <Link
+              href="/api/forgot-password"
+              className="text-xs text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? "Signing in…" : "Sign in"}
           </button>

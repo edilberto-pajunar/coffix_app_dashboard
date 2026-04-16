@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sidebar } from "../components/Sidebar";
-import { DataInitializer } from "../components/DataInitializer";
 import { useAuth } from "@/app/lib/AuthContext";
+import { DataInitializer } from "@/components/components/DataInitializer";
+import { MobileNav, Sidebar } from "@/components/components/Sidebar";
 
 export default function DashboardLayout({
   children,
@@ -29,12 +29,13 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <DataInitializer />
       <Sidebar />
-      <main className="flex-1 overflow-auto bg-background p-6">
+      <main className="flex-1 overflow-auto bg-background p-6 pt-16 md:pt-6">
         {children}
       </main>
+      <MobileNav />
     </div>
   );
 }

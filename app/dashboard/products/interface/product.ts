@@ -8,4 +8,5 @@ export interface Product {
   name?: string;
   order?: number;
   price?: number;
+  disabledStores?: string[];
 }

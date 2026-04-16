@@ -15,7 +15,7 @@ export default function DashboardPage() {
 
     const stats = [
         { label: "Total Products", value: totalProducts },
-        { label: "Avg Price", value: `₱${avgPrice.toFixed(2)}` },
+        { label: "Avg Price", value: `${avgPrice.toFixed(2)}` },
     ];
 
     return (
@@ -56,7 +56,7 @@ export default function DashboardPage() {
                                     <p className="text-xs text-light-grey">{categoriesLoaded ? getCategoryName(product.categoryId) : "—"}</p>
                                 </div>
                                 <span className="text-sm font-semibold text-primary">
-                                    ₱{(product.price ?? 0).toFixed(2)}
+                                    {(product.price ?? 0).toFixed(2)}
                                 </span>
                             </div>
                         ))

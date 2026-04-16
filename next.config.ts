@@ -10,6 +10,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  turbopack: {
+    resolveAlias: {
+      fs: { browser: "./empty.js" },
+      path: { browser: "./empty.js" },
+    },
+  },
 };
 
 export default nextConfig;

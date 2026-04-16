@@ -1,61 +1,166 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { useStoreStore } from "../../stores/store/useStoreStore";
+import { useStaffStore } from "../../staffs/store/useStaffStore";
+import { useAuth } from "@/app/lib/AuthContext";
 import { Product } from "../interface/product";
-import { Modifier } from "../interface/modifier";
 import { ProductService } from "../service/ProductService";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
+type DialogMode = "edit-product" | "delete-product" | "add-modifier" | "remove-modifier-group" | null;
 
-type DialogMode = "edit-product" | "delete-product" | "add-modifier" | "edit-modifier" | "delete-modifier" | null;
-
-const emptyModifier: Omit<Modifier, "docId"> = { label: "", priceDelta: 0, isDefault: false, groupId: "" };
+function MultiSelect({
+  label,
+  options,
+  selected,
+  onChange,
+  showSelectAll,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+  showSelectAll?: boolean;
+}) {
+  function toggle(value: string) {
+    onChange(
+      selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value],
+    );
+  }
+  const allSelected = options.length > 0 && options.every((o) => selected.includes(o.value));
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <label className="text-xs text-light-grey">{label}</label>
+        {showSelectAll && options.length > 0 && (
+          <div className="flex gap-2">
+            <button type="button" onClick={() => onChange(options.map((o) => o.value))} disabled={allSelected} className="text-xs text-primary hover:underline disabled:opacity-40">Select all</button>
+            <span className="text-xs text-light-grey">·</span>
+            <button type="button" onClick={() => onChange([])} disabled={selected.length === 0} className="text-xs text-light-grey hover:text-black hover:underline disabled:opacity-40">Unselect all</button>
+          </div>
+        )}
+      </div>
+      <div className="max-h-36 overflow-y-auto rounded-lg border border-border bg-white p-2 space-y-1">
+        {options.length === 0 ? (
+          <p className="px-1 py-1 text-xs text-light-grey">No options available.</p>
+        ) : (
+          options.map((opt) => (
+            <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black">
+              <input type="checkbox" checked={selected.includes(opt.value)} onChange={() => toggle(opt.value)} className="accent-primary" />
+              {opt.label}
+            </label>
+          ))
+        )}
+      </div>
+      {selected.length > 0 && <p className="mt-1 text-xs text-light-grey">{selected.length} selected</p>}
+    </div>
+  );
+}
 
 export default function ProductDetailPage() {
     const { productId } = useParams<{ productId: string }>();
     const router = useRouter();
 
+    const { user } = useAuth();
+    const staffs = useStaffStore((s) => s.staffs);
+    const currentStaff = staffs.find((s) => s.docId === user?.uid);
+    const isAdmin = currentStaff?.role === "admin";
+
     const products = useDashboardStore((s) => s.products);
-    const modifiers = useDashboardStore((s) => s.modifiers);
     const modifierGroups = useDashboardStore((s) => s.modifierGroups);
     const getCategoryName = useDashboardStore((s) => s.getCategoryName);
     const stores = useStoreStore((s) => s.stores);
 
     const [dialog, setDialog] = useState<DialogMode>(null);
     const [productForm, setProductForm] = useState<Partial<Product>>({});
-    const [modifierForm, setModifierForm] = useState<Omit<Modifier, "docId">>(emptyModifier);
-    const [activeModifierId, setActiveModifierId] = useState<string | null>(null);
+    const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+    const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+    const dragIndex = useRef<number | null>(null);
     const [loading, setLoading] = useState(false);
+    const [statusLoading, setStatusLoading] = useState(false);
 
     const product = products.find((p) => p.docId === productId);
 
-    const productModifierGroups = modifierGroups.filter((g) =>
-        product?.modifierGroupIds?.includes(g.docId ?? ""),
-    );
+    const productModifierGroups = (product?.modifierGroupIds ?? [])
+        .map((id) => modifierGroups.find((g) => g.docId === id))
+        .filter(Boolean) as typeof modifierGroups;
 
-    const getModifiersForGroup = (group: typeof modifierGroups[0]) =>
-        modifiers.filter((m) => group.modifierIds?.includes(m.docId ?? ""));
+
+    // ── Status helpers ──────────────────────────────────────────────────────────
+
+    // Temporary disable per store: store_manager can toggle for their assigned stores
+    // Admin sees all; store_manager sees only their assigned stores
+    const assignedStoreIds = isAdmin
+        ? (product?.availableToStores ?? [])
+        : (currentStaff?.storeIds ?? []).filter((id) =>
+              product?.availableToStores?.includes(id),
+          );
+
+    const disabledStores = product?.disabledStores ?? [];
+
+    // All assigned stores are disabled
+    const isAllDisabled =
+        assignedStoreIds.length > 0 &&
+        assignedStoreIds.every((id) => disabledStores.includes(id));
+
+    async function handleToggleAllStores() {
+        if (!product?.docId) return;
+        setStatusLoading(true);
+        try {
+            const allStoreIds = product?.availableToStores ?? [];
+            const updated = isAllDisabled
+                ? disabledStores.filter((id) => !allStoreIds.includes(id))
+                : [...new Set([...disabledStores, ...allStoreIds])];
+            await ProductService.updateProduct(product.docId, { disabledStores: updated });
+            toast.success(
+                isAllDisabled
+                    ? "Product enabled for all stores."
+                    : "Product disabled for all stores.",
+            );
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to update status.");
+        } finally {
+            setStatusLoading(false);
+        }
+    }
+
+    async function handleToggleStoreDisable(storeId: string) {
+        if (!product?.docId) return;
+        setStatusLoading(true);
+        try {
+            const isCurrentlyDisabled = disabledStores.includes(storeId);
+            const updated = isCurrentlyDisabled
+                ? disabledStores.filter((id) => id !== storeId)
+                : [...disabledStores, storeId];
+            await ProductService.updateProduct(product.docId, { disabledStores: updated });
+            toast.success(
+                isCurrentlyDisabled
+                    ? "Product re-enabled for this store."
+                    : "Product temporarily disabled for this store.",
+            );
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to update status.");
+        } finally {
+            setStatusLoading(false);
+        }
+    }
+
+    // ── Other handlers ──────────────────────────────────────────────────────────
 
     function openEditProduct() {
         setProductForm(product ?? {});
         setDialog("edit-product");
     }
 
-    function openEditModifier(m: Modifier) {
-        setActiveModifierId(m.docId ?? null);
-        setModifierForm({ label: m.label ?? "", priceDelta: m.priceDelta ?? 0, isDefault: m.isDefault ?? false, groupId: m.groupId ?? "" });
-        setDialog("edit-modifier");
-    }
-
-    function openDeleteModifier(m: Modifier) {
-        setActiveModifierId(m.docId ?? null);
-        setDialog("delete-modifier");
-    }
 
     function openAddModifier() {
-        setModifierForm(emptyModifier);
+        setSelectedGroupId("");
         setDialog("add-modifier");
     }
 
@@ -77,23 +182,41 @@ export default function ProductDetailPage() {
         router.push("/dashboard/products");
     }
 
-    async function handleSaveModifier() {
+    async function handleAddModifierGroup() {
+        if (!selectedGroupId || !product?.docId) return;
         setLoading(true);
-        if (dialog === "add-modifier") {
-            await ProductService.createModifier(modifierForm);
-        } else if (activeModifierId) {
-            await ProductService.updateModifier(activeModifierId, modifierForm);
+        const current = product.modifierGroupIds ?? [];
+        if (!current.includes(selectedGroupId)) {
+            await ProductService.updateProduct(product.docId, {
+                modifierGroupIds: [...current, selectedGroupId],
+            });
         }
         setLoading(false);
         setDialog(null);
     }
 
-    async function handleDeleteModifier() {
-        if (!activeModifierId) return;
+    function openRemoveModifierGroup(groupDocId: string) {
+        setActiveGroupId(groupDocId);
+        setDialog("remove-modifier-group");
+    }
+
+    async function handleRemoveModifierGroup() {
+        if (!activeGroupId || !product?.docId) return;
         setLoading(true);
-        await ProductService.deleteModifier(activeModifierId);
+        await ProductService.updateProduct(product.docId, {
+            modifierGroupIds: (product.modifierGroupIds ?? []).filter((id) => id !== activeGroupId),
+        });
         setLoading(false);
         setDialog(null);
+    }
+
+    async function handleDrop(overIndex: number) {
+        if (dragIndex.current === null || dragIndex.current === overIndex || !product?.docId) return;
+        const ids = [...(product.modifierGroupIds ?? [])];
+        const [moved] = ids.splice(dragIndex.current, 1);
+        ids.splice(overIndex, 0, moved);
+        dragIndex.current = null;
+        await ProductService.updateProduct(product.docId, { modifierGroupIds: ids });
     }
 
     if (!product) {
@@ -135,7 +258,7 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                {/* Product Info */}
+                {/* Left column: product info + status controls */}
                 <div className="lg:col-span-1 space-y-4">
                     <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
                         {product.imageUrl ? (
@@ -147,15 +270,15 @@ export default function ProductDetailPage() {
                                 className="h-48 w-full object-cover"
                             />
                         ) : (
-                            <div className="flex h-48 items-center justify-center bg-soft-grey text-4xl font-bold text-light-grey">
+                            <div className="flex h-48 items-center justify-center bg-primary text-4xl font-bold text-white">
                                 {(product.name ?? "?")[0].toUpperCase()}
                             </div>
                         )}
                         <div className="divide-y divide-border p-0">
                             {[
                                 { label: "Category", value: getCategoryName(product.categoryId) },
-                                { label: "Price", value: `₱${(product.price ?? 0).toFixed(2)}` },
-                                { label: "Cost", value: `₱${(product.cost ?? 0).toFixed(2)}` },
+                                { label: "Price", value: `$${(product.price ?? 0).toFixed(2)}` },
+                                { label: "Cost", value: `$${(product.cost ?? 0).toFixed(2)}` },
                                 { label: "Order", value: product.order ?? "—" },
                             ].map(({ label, value }) => (
                                 <div key={label} className="flex items-center justify-between px-4 py-3">
@@ -166,24 +289,66 @@ export default function ProductDetailPage() {
                         </div>
                     </div>
 
-                    {product.availableToStores && product.availableToStores.length > 0 && (
-                        <div className="rounded-xl border border-border bg-white p-4 shadow-(--shadow)">
-                            <p className="mb-2 text-xs font-medium text-light-grey uppercase tracking-wide">Available to Stores</p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {product.availableToStores.map((storeId) => {
-                                    const store = stores.find((s) => s.docId === storeId);
-                                    return (
-                                        <span key={storeId} className="rounded-full bg-soft-grey px-2.5 py-1 text-xs text-black">
-                                            {store?.name ?? storeId}
-                                        </span>
-                                    );
-                                })}
+
+                    {/* ── Status Controls ── */}
+                    <div className="rounded-xl border border-border bg-white p-4 shadow-(--shadow) space-y-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-light-grey">Availability</p>
+
+                        {/* Product disable — admin only */}
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-medium text-black">Product Availability</p>
                             </div>
+                            {isAdmin ? (
+                                <Button
+                                    size="xs"
+                                    variant={isAllDisabled ? "solid-success" : "solid-error"}
+                                    onClick={handleToggleAllStores}
+                                    disabled={statusLoading}
+                                >
+                                    {isAllDisabled ? "Click to enable for All Stores" : "Click to disable for All Stores"}
+                                </Button>
+                            ) : (
+                                <span className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                                    isAllDisabled
+                                        ? "bg-red-50 text-error"
+                                        : "bg-green-50 text-success"
+                                }`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${isAllDisabled ? "bg-error" : "bg-success"}`} />
+                                    {isAllDisabled ? "Disabled for All Stores" : "Enabled for All Stores"}
+                                </span>
+                            )}
                         </div>
-                    )}
+
+                        {/* Per-store temporary disable — store_manager (or admin) */}
+                        {assignedStoreIds.length > 0 && (
+                            <div className="space-y-2">
+                                <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                                    {assignedStoreIds.map((storeId) => {
+                                        const store = stores.find((s) => s.docId === storeId);
+                                        const isDisabled = disabledStores.includes(storeId);
+                                        return (
+                                            <div key={storeId} className="flex items-center justify-between px-3 py-2.5">
+                                                <span className="text-sm text-black">{store?.name ?? storeId}</span>
+                                                <Button
+                                                    size="xs"
+                                                    variant={isDisabled ? "solid-error" : "solid-success"}
+                                                    onClick={() => handleToggleStoreDisable(storeId)}
+                                                    disabled={statusLoading}
+                                                    className="rounded-full"
+                                                >
+                                                    {isDisabled ? "Click to enable for this Store" : "Click to disable for this Store"}
+                                                </Button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Modifier Groups */}
+                {/* Right column: modifier groups */}
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="font-semibold text-black">Modifier Groups</h2>
@@ -191,7 +356,7 @@ export default function ProductDetailPage() {
                             onClick={openAddModifier}
                             className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
                         >
-                            + Add Modifier
+                            + Add Modifier Group
                         </button>
                     </div>
 
@@ -200,70 +365,38 @@ export default function ProductDetailPage() {
                             No modifier groups linked to this product.
                         </div>
                     ) : (
-                        productModifierGroups.map((group) => {
-                            const groupModifiers = getModifiersForGroup(group);
-                            return (
-                                <div key={group.docId} className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
-                                    <div className="flex items-center justify-between border-b border-border bg-background px-4 py-3">
+                        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
+                            {productModifierGroups.map((group, i) => (
+                                <div
+                                    key={group.docId}
+                                    draggable
+                                    onDragStart={() => { dragIndex.current = i; }}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={() => handleDrop(i)}
+                                    className={`flex items-center justify-between px-4 py-3 ${i !== 0 ? "border-t border-border" : ""}`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <svg className="h-4 w-4 shrink-0 cursor-grab text-light-grey active:cursor-grabbing" viewBox="0 0 16 16" fill="currentColor">
+                                            <circle cx="5.5" cy="3.5" r="1.25" />
+                                            <circle cx="10.5" cy="3.5" r="1.25" />
+                                            <circle cx="5.5" cy="8" r="1.25" />
+                                            <circle cx="10.5" cy="8" r="1.25" />
+                                            <circle cx="5.5" cy="12.5" r="1.25" />
+                                            <circle cx="10.5" cy="12.5" r="1.25" />
+                                        </svg>
                                         <div>
                                             <span className="font-medium text-black">{group.name ?? "—"}</span>
-                                            <span className="ml-2 text-xs text-light-grey">
-                                                {group.required ? "Required" : "Optional"}
-                                            </span>
                                         </div>
                                     </div>
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="border-b border-border">
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-light-grey">Label</th>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-light-grey">Price Delta</th>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-light-grey">Default</th>
-                                                <th className="px-4 py-2 text-right text-xs font-medium text-light-grey">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border">
-                                            {groupModifiers.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={4} className="px-4 py-6 text-center text-light-grey">No modifiers.</td>
-                                                </tr>
-                                            ) : (
-                                                groupModifiers.map((m) => (
-                                                    <tr key={m.docId} className="transition-colors hover:bg-background">
-                                                        <td className="px-4 py-2.5 font-medium text-black">{m.label ?? "—"}</td>
-                                                        <td className="px-4 py-2.5 text-primary">
-                                                            {(m.priceDelta ?? 0) >= 0 ? "+" : ""}₱{(m.priceDelta ?? 0).toFixed(2)}
-                                                        </td>
-                                                        <td className="px-4 py-2.5">
-                                                            {m.isDefault ? (
-                                                                <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-success">Yes</span>
-                                                            ) : (
-                                                                <span className="rounded-full bg-soft-grey px-2 py-0.5 text-xs text-light-grey">No</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right">
-                                                            <div className="inline-flex gap-2">
-                                                                <button
-                                                                    onClick={() => openEditModifier(m)}
-                                                                    className="text-xs text-black hover:text-primary"
-                                                                >
-                                                                    Edit
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => openDeleteModifier(m)}
-                                                                    className="text-xs text-error hover:opacity-70"
-                                                                >
-                                                                    Delete
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
+                                    <button
+                                        onClick={() => openRemoveModifierGroup(group.docId ?? "")}
+                                        className="text-xs text-error hover:opacity-70"
+                                    >
+                                        Remove
+                                    </button>
                                 </div>
-                            );
-                        })
+                            ))}
+                        </div>
                     )}
                 </div>
             </div>
@@ -293,20 +426,43 @@ export default function ProductDetailPage() {
                                             />
                                         </div>
                                     ))}
-                                    {(["price", "cost", "order"] as const).map((field) => (
+                                    {(["price", "cost"] as const).map((field) => (
                                         <div key={field}>
                                             <label className="mb-1 block text-xs text-light-grey capitalize">{field}</label>
-                                            <input
-                                                type="number"
-                                                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                                value={(productForm[field] as number) ?? ""}
-                                                onChange={(e) => setProductForm((f) => ({ ...f, [field]: parseFloat(e.target.value) }))}
-                                            />
+                                            <div className="relative">
+                                                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    step="0.01"
+                                                    className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                                    placeholder="0.00"
+                                                    value={(productForm[field] as number) ?? ""}
+                                                    onChange={(e) => setProductForm((f) => ({ ...f, [field]: parseFloat(e.target.value) }))}
+                                                />
+                                            </div>
                                         </div>
                                     ))}
+                                    <div>
+                                        <label className="mb-1 block text-xs text-light-grey capitalize">Order</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                            value={(productForm.order as number) ?? ""}
+                                            onChange={(e) => setProductForm((f) => ({ ...f, order: parseInt(e.target.value) }))}
+                                        />
+                                    </div>
+                                    <MultiSelect
+                                        label="Available to Stores"
+                                        options={stores.map((s) => ({ value: s.docId ?? "", label: s.name ?? s.docId ?? "" }))}
+                                        selected={productForm.availableToStores ?? []}
+                                        onChange={(v) => setProductForm((f) => ({ ...f, availableToStores: v }))}
+                                        showSelectAll
+                                    />
                                 </div>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
                                     <button onClick={handleUpdateProduct} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                                         {loading ? "Saving…" : "Save"}
                                     </button>
@@ -322,7 +478,7 @@ export default function ProductDetailPage() {
                                     Are you sure you want to delete <strong className="text-black">{product.name}</strong>? This cannot be undone.
                                 </p>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
                                     <button onClick={handleDeleteProduct} disabled={loading} className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
                                         {loading ? "Deleting…" : "Delete"}
                                     </button>
@@ -330,71 +486,46 @@ export default function ProductDetailPage() {
                             </>
                         )}
 
-                        {/* Add / Edit Modifier */}
-                        {(dialog === "add-modifier" || dialog === "edit-modifier") && (
+                        {/* Add Modifier Group */}
+                        {dialog === "add-modifier" && (
                             <>
-                                <h3 className="mb-4 text-lg font-semibold text-black">
-                                    {dialog === "add-modifier" ? "Add Modifier" : "Edit Modifier"}
-                                </h3>
+                                <h3 className="mb-4 text-lg font-semibold text-black">Add Modifier Group</h3>
                                 <div className="space-y-3">
                                     <div>
-                                        <label className="mb-1 block text-xs text-light-grey">Label</label>
-                                        <input
-                                            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                            value={modifierForm.label ?? ""}
-                                            onChange={(e) => setModifierForm((f) => ({ ...f, label: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="mb-1 block text-xs text-light-grey">Price Delta (₱)</label>
-                                        <input
-                                            type="number"
-                                            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                            value={modifierForm.priceDelta ?? 0}
-                                            onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: parseFloat(e.target.value) }))}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="mb-1 block text-xs text-light-grey">Group ID</label>
+                                        <label className="mb-1 block text-xs text-light-grey">Modifier Group</label>
                                         <select
                                             className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                            value={modifierForm.groupId ?? ""}
-                                            onChange={(e) => setModifierForm((f) => ({ ...f, groupId: e.target.value }))}
+                                            value={selectedGroupId}
+                                            onChange={(e) => setSelectedGroupId(e.target.value)}
                                         >
-                                            <option value="">— Select group —</option>
-                                            {modifierGroups.map((g) => (
-                                                <option key={g.docId} value={g.docId}>{g.name}</option>
-                                            ))}
+                                            <option value="">— Select a modifier group —</option>
+                                            {modifierGroups
+                                                .filter((g) => !product.modifierGroupIds?.includes(g.docId ?? ""))
+                                                .map((g) => (
+                                                    <option key={g.docId} value={g.docId}>{g.name}</option>
+                                                ))}
                                         </select>
                                     </div>
-                                    <label className="flex items-center gap-2 text-sm text-black">
-                                        <input
-                                            type="checkbox"
-                                            checked={modifierForm.isDefault ?? false}
-                                            onChange={(e) => setModifierForm((f) => ({ ...f, isDefault: e.target.checked }))}
-                                            className="accent-primary"
-                                        />
-                                        Default modifier
-                                    </label>
                                 </div>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
-                                    <button onClick={handleSaveModifier} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
-                                        {loading ? "Saving…" : "Save"}
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
+                                    <button onClick={handleAddModifierGroup} disabled={loading || !selectedGroupId} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
+                                        {loading ? "Saving…" : "Add"}
                                     </button>
                                 </div>
                             </>
                         )}
 
-                        {/* Delete Modifier */}
-                        {dialog === "delete-modifier" && (
+
+                        {/* Remove Modifier Group */}
+                        {dialog === "remove-modifier-group" && (
                             <>
-                                <h3 className="mb-2 text-lg font-semibold text-black">Delete Modifier</h3>
-                                <p className="text-sm text-light-grey">Are you sure you want to delete this modifier? This cannot be undone.</p>
+                                <h3 className="mb-2 text-lg font-semibold text-black">Remove Modifier Group</h3>
+                                <p className="text-sm text-light-grey">Remove this modifier group from the product? The group itself will not be deleted.</p>
                                 <div className="mt-5 flex justify-end gap-2">
-                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey">Cancel</button>
-                                    <button onClick={handleDeleteModifier} disabled={loading} className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
-                                        {loading ? "Deleting…" : "Delete"}
+                                    <button onClick={() => setDialog(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-[#f0f0f0]">Cancel</button>
+                                    <button onClick={handleRemoveModifierGroup} disabled={loading} className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50">
+                                        {loading ? "Removing…" : "Remove"}
                                     </button>
                                 </div>
                             </>

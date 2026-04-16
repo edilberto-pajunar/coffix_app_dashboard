@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Image from "next/image";
 import { useStoreStore } from "./store/useStoreStore";
 import { isStoreOpenAt, DayHours } from "./interface/store";
 import { StoreService } from "./service/StoreService";
+import { Button } from "@/components/ui/button";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 type Day = typeof DAYS[number];
@@ -19,7 +20,6 @@ type DayHoursForm = {
 
 type StoreForm = {
   name: string;
-  storeCode: string;
   email: string;
   contactNumber: string;
   location: string;
@@ -35,7 +35,6 @@ const defaultDayHours: DayHoursForm = { isOpen: false, open: "08:00", close: "22
 
 const emptyForm: StoreForm = {
   name: "",
-  storeCode: "",
   email: "",
   contactNumber: "",
   location: "",
@@ -48,12 +47,58 @@ const emptyForm: StoreForm = {
 };
 
 const REQUIRED: (keyof Omit<StoreForm, "openingHours">)[] = [
-  "name", "storeCode", "email", "contactNumber", "location", "address",
+  "name", "email", "contactNumber", "location", "address",
 ];
 
 export default function StoresPage() {
   const stores = useStoreStore((s) => s.stores);
   const router = useRouter();
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Open" | "Closed" | "Disabled">("All");
+  type StoreSortKey = "name" | "status";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<StoreSortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: StoreSortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let result = stores.filter((s) => {
+      if (statusFilter !== "All") {
+        const disabled = s.disable ?? false;
+        const open = !disabled && isStoreOpenAt(s);
+        const storeStatus = disabled ? "Disabled" : open ? "Open" : "Closed";
+        if (storeStatus !== statusFilter) return false;
+      }
+      if (q) {
+        return (
+          (s.name ?? "").toLowerCase().includes(q) ||
+          (s.email ?? "").toLowerCase().includes(q) ||
+          (s.contactNumber ?? "").toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") {
+        cmp = (a.name ?? "").localeCompare(b.name ?? "");
+      } else {
+        const getStatus = (s: typeof a) => {
+          if (s.disable) return "Disabled";
+          return isStoreOpenAt(s) ? "Open" : "Closed";
+        };
+        cmp = getStatus(a).localeCompare(getStatus(b));
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return result;
+  }, [stores, search, statusFilter, sortKey, sortDir]);
 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<StoreForm>(emptyForm);
@@ -104,7 +149,6 @@ export default function StoresPage() {
     try {
       await StoreService.createStore({
         name: form.name.trim(),
-        storeCode: form.storeCode.trim(),
         email: form.email.trim(),
         contactNumber: form.contactNumber.trim(),
         location: form.location.trim(),
@@ -143,32 +187,66 @@ export default function StoresPage() {
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          placeholder="Search stores…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-black outline-none placeholder:text-light-grey focus:border-primary sm:max-w-xs"
+        />
+        <div className="flex flex-wrap gap-2">
+          {(["All", "Open", "Closed", "Disabled"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setStatusFilter(v)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === v ? "border-primary bg-primary text-white" : "border-border text-black "}`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-border bg-white shadow-(--shadow)">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Store</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Code</th>
+              <th
+                onClick={() => toggleSort("name")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Store {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Contact</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Printer ID</th>
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Status</th>
-              <th className="px-5 py-3 text-right font-medium text-light-grey">Action</th>
+              <th
+                onClick={() => toggleSort("status")}
+                className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
+              >
+                Status {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
+              </th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Disabled</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {stores.length === 0 ? (
+            {displayed.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
                   No stores found.
                 </td>
               </tr>
             ) : (
-              stores.map((store) => {
+              displayed.map((store) => {
                 const isOpen = isStoreOpenAt(store);
                 const isDisabled = store.disable ?? false;
 
                 return (
-                  <tr key={store.docId} className="transition-colors hover:bg-background">
+                  <tr
+                    key={store.docId}
+                    onClick={() => router.push(`/dashboard/stores/${store.docId}`)}
+                    className="cursor-pointer transition-colors hover:bg-background"
+                  >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         {store.imageUrl ? (
@@ -187,9 +265,6 @@ export default function StoresPage() {
                         <span className="font-medium text-black">{store.name ?? "—"}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 font-mono text-xs text-light-grey">
-                      {store.storeCode ?? "—"}
-                    </td>
                     <td className="px-5 py-3">
                       <div className="space-y-0.5">
                         <p className="text-black">{store.email ?? "—"}</p>
@@ -198,30 +273,23 @@ export default function StoresPage() {
                     </td>
                     <td className="px-5 py-3 text-black">{store.printerId ?? "—"}</td>
                     <td className="px-5 py-3">
-                      {isDisabled ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-disabled-bg px-2.5 py-1 text-xs font-medium text-light-grey">
-                          <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
-                          Disabled
-                        </span>
-                      ) : isOpen ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-success">
-                          <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                          Open
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-light-grey">
-                          <span className="h-1.5 w-1.5 rounded-full bg-light-grey" />
-                          Closed
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => router.push(`/dashboard/stores/${store.docId}`)}
-                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-black transition-colors hover:border-primary hover:text-primary"
+                      <Button
+                        size="xs"
+                        variant={isDisabled ? "secondary" : isOpen ? "solid-success" : "destructive"}
+                        className="rounded-full pointer-events-none"
                       >
-                        View
-                      </button>
+                        {isDisabled ? "Disabled" : isOpen ? "Open" : "Closed"}
+                      </Button>
+                    </td>
+                    <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        size="xs"
+                        variant={isDisabled ? "solid-error" : "solid-success"}
+                        onClick={() => StoreService.updateStore(store.docId, { disable: !isDisabled })}
+                        className="rounded-full"
+                      >
+                        {isDisabled ? "Disabled" : "Enabled"}
+                      </Button>
                     </td>
                   </tr>
                 );
@@ -257,17 +325,6 @@ export default function StoresPage() {
                     onChange={(e) => setField("name", e.target.value)}
                   />
                   {errors.name && <p className="mt-1 text-xs text-error">Name is required.</p>}
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-xs text-light-grey">Store Code *</label>
-                  <input
-                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.storeCode ? "border-error" : "border-border"}`}
-                    placeholder="e.g. STR-001"
-                    value={form.storeCode}
-                    onChange={(e) => setField("storeCode", e.target.value)}
-                  />
-                  {errors.storeCode && <p className="mt-1 text-xs text-error">Required.</p>}
                 </div>
 
                 <div>
