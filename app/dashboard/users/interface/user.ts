@@ -19,4 +19,5 @@ export interface AppUser {
   disabled?: boolean;
   qrId?: string;
   fcmToken?: string;
+  appVersion?: string;
 }

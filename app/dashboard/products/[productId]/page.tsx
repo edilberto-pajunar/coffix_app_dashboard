@@ -77,6 +77,8 @@ export default function ProductDetailPage() {
 
     const [dialog, setDialog] = useState<DialogMode>(null);
     const [productForm, setProductForm] = useState<Partial<Product>>({});
+    const [priceStr, setPriceStr] = useState<string>("0.00");
+    const [costStr, setCostStr] = useState<string>("0.00");
     const [selectedGroupId, setSelectedGroupId] = useState<string>("");
     const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
     const dragIndex = useRef<number | null>(null);
@@ -154,7 +156,10 @@ export default function ProductDetailPage() {
     // ── Other handlers ──────────────────────────────────────────────────────────
 
     function openEditProduct() {
-        setProductForm(product ?? {});
+        const p = product ?? {};
+        setProductForm(p);
+        setPriceStr(((p.price ?? 0) as number).toFixed(2));
+        setCostStr(((p.cost ?? 0) as number).toFixed(2));
         setDialog("edit-product");
     }
 
@@ -426,32 +431,45 @@ export default function ProductDetailPage() {
                                             />
                                         </div>
                                     ))}
-                                    {(["price", "cost"] as const).map((field) => (
-                                        <div key={field}>
-                                            <label className="mb-1 block text-xs text-light-grey capitalize">{field}</label>
-                                            <div className="relative">
-                                                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    step="0.01"
-                                                    className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                                    placeholder="0.00"
-                                                    value={(productForm[field] as number) ?? ""}
-                                                    onChange={(e) => setProductForm((f) => ({ ...f, [field]: parseFloat(e.target.value) }))}
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
                                     <div>
-                                        <label className="mb-1 block text-xs text-light-grey capitalize">Order</label>
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
-                                            value={(productForm.order as number) ?? ""}
-                                            onChange={(e) => setProductForm((f) => ({ ...f, order: parseInt(e.target.value) }))}
-                                        />
+                                        <label className="mb-1 block text-xs text-light-grey capitalize">Price</label>
+                                        <div className="relative">
+                                            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                                placeholder="0.00"
+                                                value={priceStr}
+                                                onChange={(e) => setPriceStr(e.target.value)}
+                                                onBlur={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    const formatted = isNaN(val) ? "0.00" : val.toFixed(2);
+                                                    setPriceStr(formatted);
+                                                    setProductForm((f) => ({ ...f, price: parseFloat(formatted) }));
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs text-light-grey capitalize">Cost</label>
+                                        <div className="relative">
+                                            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                                placeholder="0.00"
+                                                value={costStr}
+                                                onChange={(e) => setCostStr(e.target.value)}
+                                                onBlur={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    const formatted = isNaN(val) ? "0.00" : val.toFixed(2);
+                                                    setCostStr(formatted);
+                                                    setProductForm((f) => ({ ...f, cost: parseFloat(formatted) }));
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                     <MultiSelect
                                         label="Available to Stores"

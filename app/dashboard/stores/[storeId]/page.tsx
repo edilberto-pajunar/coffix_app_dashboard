@@ -378,7 +378,7 @@ export default function StoreDetailPage() {
                     weekday: "short", year: "numeric", month: "short", day: "numeric",
                   });
                   return (
-                    <div key={dateKey} className={`flex items-center justify-between px-4 py-3 ${isPast ? "opacity-40" : ""}`}>
+                    <div key={dateKey} className={`flex items-center justify-between px-4 py-3 ${isPast ? "opacity-90" : ""}`}>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-black">{dateLabel}</span>

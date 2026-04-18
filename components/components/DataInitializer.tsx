@@ -7,6 +7,7 @@ import { useStaffStore } from "@/app/dashboard/staffs/store/useStaffStore";
 import { useGlobalSettingsStore } from "@/app/dashboard/globalSettings/store/useGlobalSettingsStore";
 import { useNotificationStore } from "@/app/dashboard/notifications/store/useNotificationStore";
 import { useEmailTemplateStore } from "@/app/dashboard/emailTemplates/store/useEmailTemplateStore";
+import { useTransactionStore } from "@/app/dashboard/transactions/store/useTransactionStore";
 
 export function DataInitializer() {
   const listenToAll = useDashboardStore((s) => s.listenToAll);
@@ -16,6 +17,8 @@ export function DataInitializer() {
   const listenToSettings = useGlobalSettingsStore((s) => s.listenToSettings);
   const listenToCampaigns = useNotificationStore((s) => s.listenToCampaigns);
   const listenToTemplates = useEmailTemplateStore((s) => s.listenToTemplates);
+  const listenToTransactions = useTransactionStore((s) => s.listenToTransactions);
+  const listenToOrders = useTransactionStore((s) => s.listenToOrders);
 
   useEffect(() => {
     const unsubAll = listenToAll();
@@ -25,6 +28,8 @@ export function DataInitializer() {
     const unsubSettings = listenToSettings();
     const unsubNotifications = listenToCampaigns();
     const unsubEmailTemplates = listenToTemplates();
+    const unsubTransactions = listenToTransactions();
+    const unsubOrders = listenToOrders();
     return () => {
       unsubAll();
       unsubStores();
@@ -33,6 +38,8 @@ export function DataInitializer() {
       unsubSettings();
       unsubNotifications();
       unsubEmailTemplates();
+      unsubTransactions();
+      unsubOrders();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -142,6 +142,7 @@ function StaffDialog({
               className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${
                 errors.email ? "border-error" : "border-border"
               }`}
+              readOnly={isEdit}
             />
             {errors.email && (
               <p className="mt-1 text-xs text-error">Valid email is required.</p>

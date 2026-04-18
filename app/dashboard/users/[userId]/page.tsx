@@ -273,6 +273,7 @@ export default function UserDetailPage() {
             title="Technical"
             rows={[
               { label: "FCM Token", value: user.fcmToken ?? "—", mono: true },
+              { label: "App Version", value: user.appVersion ?? "—", mono: true },
             ]}
           />
         </div>
@@ -405,6 +406,7 @@ export default function UserDetailPage() {
                     { label: "FCM Token", value: user.fcmToken ?? "—" },
                     { label: "Preferred Store ID", value: user.preferredStoreId ?? "—" },
                     { label: "Email Verified", value: formatBool(user.emailVerified) },
+                    { label: "App Version", value: user.appVersion ?? "—" },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-center justify-between gap-4">
                       <span className="shrink-0 text-xs text-light-grey">{label}</span>

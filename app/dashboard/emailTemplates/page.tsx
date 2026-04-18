@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { toast } from "sonner";
 import { useEmailTemplateStore } from "./store/useEmailTemplateStore";
 import { EmailTemplateService } from "./service/EmailTemplateService";
@@ -12,7 +13,7 @@ import { renderEmailTemplate } from "@/app/lib/renderEmailTemplate";
 import { sanitizeHtml } from "@/app/lib/sanitize";
 import type { Editor } from "@tiptap/react";
 import { RichTextEditor } from "@/components/components/RichTextEditor/RichTextEditor";
-import { EMAIL_VARIABLE_GROUPS } from "./constants/emailVariables";
+import { EMAIL_VARIABLE_GROUPS, SUBJECT_VARIABLES } from "@/app/utils/constant";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ function validateForm(form: TemplateForm): TemplateFormErrors {
   };
 }
 function hasErrors(e: TemplateFormErrors) { return Object.values(e).some(Boolean); }
+
 
 // ─── Variable Chips ───────────────────────────────────────────────────────────
 
@@ -91,6 +93,56 @@ function VariableChips({ variables, content, editor }: VariableChipsProps) {
   );
 }
 
+// ─── Subject Variable Chips ───────────────────────────────────────────────────
+
+type SubjectVariableChipsProps = {
+  variables: string[];
+  subject: string;
+  inputRef: RefObject<HTMLInputElement | null>;
+  onInsert: (newValue: string) => void;
+};
+
+function SubjectVariableChips({ variables, subject, inputRef, onInsert }: SubjectVariableChipsProps) {
+  const usedTokens = new Set(extractTokens(subject));
+
+  function insertAt(varName: string) {
+    const el = inputRef.current;
+    const token = `{{ ${varName} }}`;
+    if (!el) {
+      onInsert(subject + token);
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const next = el.value.slice(0, start) + token + el.value.slice(end);
+    onInsert(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + token.length, start + token.length);
+    });
+  }
+
+  return (
+    <div className="mb-1.5 flex flex-wrap gap-1.5">
+      {variables.map((varName) => {
+        const used = usedTokens.has(varName);
+        return (
+          <button
+            key={varName}
+            type="button"
+            title={`Insert {{ ${varName} }}`}
+            onClick={() => insertAt(varName)}
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-70 bg-primary/10 text-primary border-primary/20 ${used ? "opacity-60" : ""}`}
+          >
+            {varName}
+            {used && <span className="ml-0.5 text-[10px] opacity-70">✓</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Template Dialog ──────────────────────────────────────────────────────────
 
 type TemplateDialogProps = {
@@ -112,6 +164,7 @@ function TemplateDialog({
   onClose, onSubmit, onChangeName, onChangeSubject, onChangeContent, onChangeNotes,
 }: TemplateDialogProps) {
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
+  const subjectRef = useRef<HTMLInputElement>(null);
 
   return (
     <div
@@ -156,7 +209,14 @@ function TemplateDialog({
           {/* Subject */}
           <div>
             <label className="mb-1.5 block text-xs text-light-grey">Subject *</label>
+            <SubjectVariableChips
+              variables={SUBJECT_VARIABLES}
+              subject={form.subject}
+              inputRef={subjectRef}
+              onInsert={(v) => onChangeSubject(v)}
+            />
             <input
+              ref={subjectRef}
               type="text"
               value={form.subject}
               onChange={(e) => onChangeSubject(e.target.value)}
@@ -410,7 +470,7 @@ export default function EmailTemplatesPage() {
 
   // ── Preview
   function openPreview(template: EmailTemplate) {
-    const tokens = extractTokens(template.content);
+    const tokens = [...new Set([...extractTokens(template.subject ?? ""), ...extractTokens(template.content)])];
     const sampleVars = Object.fromEntries(tokens.map((v) => [v, `[${v}]`]));
     setPreviewHtml(sanitizeHtml(renderEmailTemplate(template.content, sampleVars)));
   }

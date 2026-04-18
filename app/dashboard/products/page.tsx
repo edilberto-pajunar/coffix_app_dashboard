@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "./store/useDashboardStore";
@@ -142,6 +142,38 @@ export default function ProductsPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof NewProductForm, boolean>>>({});
   const [loading, setLoading] = useState(false);
 
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [orderedProducts, setOrderedProducts] = useState<Product[]>([]);
+
+  const isDragMode = !search && selectedCategory === "All" && sortKey === "name" && sortDir === "asc";
+
+  async function handleDragEnd() {
+    const fromIdx = dragIndexRef.current;
+    if (fromIdx === null || dragOverIndex === null || fromIdx === dragOverIndex) {
+      dragIndexRef.current = null;
+      setDragOverIndex(null);
+      return;
+    }
+
+    const reordered = [...orderedProducts];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(dragOverIndex, 0, moved);
+    setOrderedProducts(reordered);
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+
+    try {
+      await Promise.all(
+        reordered.map((p, i) =>
+          ProductService.updateProduct(p.docId ?? "", { order: i }),
+        ),
+      );
+    } catch {
+      toast.error("Failed to save order.");
+    }
+  }
+
   const categoryFilters = [
     "All",
     ...Array.from(new Set(products.map((p) => getCategoryName(p.categoryId)))),
@@ -156,13 +188,17 @@ export default function ProductsPage() {
     });
     result = [...result].sort((a, b) => {
       let cmp = 0;
-      if (sortKey === "name") cmp = (a.name ?? "").localeCompare(b.name ?? "");
+      if (sortKey === "name") cmp = (a.order ?? 0) - (b.order ?? 0) || (a.name ?? "").localeCompare(b.name ?? "");
       else if (sortKey === "price") cmp = (a.price ?? 0) - (b.price ?? 0);
       else cmp = (a.cost ?? 0) - (b.cost ?? 0);
       return sortDir === "asc" ? cmp : -cmp;
     });
     return result;
   }, [products, search, selectedCategory, getCategoryName, sortKey, sortDir]);
+
+  useEffect(() => {
+    setOrderedProducts(filtered);
+  }, [filtered]);
 
   const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.docId ?? ""));
   const someVisibleSelected = filtered.some((p) => selectedIds.has(p.docId ?? ""));
@@ -350,6 +386,7 @@ export default function ProductsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
+              {isDragMode && <th className="w-6 px-2 py-3" />}
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
@@ -384,19 +421,35 @@ export default function ProductsPage() {
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={7} className="px-5 py-10 text-center text-light-grey">
                   No products found.
                 </td>
               </tr>
             ) : (
-              filtered.map((product: Product) => {
+              (isDragMode ? orderedProducts : filtered).map((product: Product, idx: number) => {
                 const isSelected = selectedIds.has(product.docId ?? "");
+                const isDragOver = isDragMode && dragOverIndex === idx;
                 return (
                   <tr
                     key={product.docId}
+                    draggable={isDragMode}
+                    onDragStart={() => { dragIndexRef.current = idx; }}
+                    onDragOver={(e) => { if (isDragMode) { e.preventDefault(); setDragOverIndex(idx); } }}
+                    onDragLeave={() => { if (isDragMode) setDragOverIndex(null); }}
+                    onDrop={(e) => { e.preventDefault(); handleDragEnd(); }}
+                    onDragEnd={handleDragEnd}
                     onClick={() => router.push(`/dashboard/products/${product.docId}`)}
-                    className={`group cursor-pointer transition-colors hover:bg-background ${isSelected ? "bg-blue-50" : ""} ${(product.availableToStores ?? []).length > 0 && (product.availableToStores ?? []).every((id) => (product.disabledStores ?? []).includes(id)) ? "opacity-50" : ""}`}
+                    className={`group transition-colors hover:bg-background ${isDragMode ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${isSelected ? "bg-blue-50" : ""} ${isDragOver ? "border-t-2 border-primary" : ""} ${(product.availableToStores ?? []).length > 0 && (product.availableToStores ?? []).every((id) => (product.disabledStores ?? []).includes(id)) ? "opacity-50" : ""}`}
                   >
+                    {isDragMode && (
+                      <td className="w-6 px-2 py-3 text-light-grey" onClick={(e) => e.stopPropagation()}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="opacity-40">
+                          <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
+                          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+                          <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
+                        </svg>
+                      </td>
+                    )}
                     <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"

@@ -15,9 +15,11 @@ import {
   Settings,
   Bell,
   Mail,
+  ArrowLeftRight,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
+import { useAuth } from "@/app/lib/AuthContext";
 import { WEBAPP_VERSION } from "@/app/utils/constant";
 import { useState } from "react";
 
@@ -28,6 +30,7 @@ const navItems = [
   { href: "/dashboard/stores", label: "Stores", icon: Store },
   { href: "/dashboard/modifierGroups", label: "Modifier Groups", icon: Layers },
   { href: "/dashboard/users", label: "Customers", icon: Users },
+  { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/dashboard/staffs", label: "Users", icon: UserCheck },
   { href: "/dashboard/notifications", label: "Campaigns", icon: Bell },
   { href: "/dashboard/globalSettings", label: "Global Settings", icon: Settings },
@@ -37,6 +40,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useAuth();
 
   async function handleLogout() {
     await signOut(auth);
@@ -47,7 +51,7 @@ export function Sidebar() {
     <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-border bg-white">
       <div className="flex h-14 items-center border-b border-border px-4">
         <Link href="/dashboard" className="font-semibold text-primary">
-          Coffix
+        Coffix App Manager
         </Link>
       </div>
       <nav className="flex flex-col gap-0.5 p-3">
@@ -70,13 +74,16 @@ export function Sidebar() {
         })}
       </nav>
       <div className="mt-auto border-t border-border p-3">
-        <button
+      <button
           onClick={handleLogout}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-black transition-colors hover:bg-soft-grey hover:text-white"
         >
           <LogOut size={15} />
           Logout
         </button>
+        {user?.email && (
+          <p className="mb-1 px-3 text-xs  truncate">{user.email}</p>
+        )}
         <p className="mt-2 px-3 text-xs">v{WEBAPP_VERSION}</p>
       </div>
     </aside>
@@ -87,6 +94,7 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useAuth();
 
   async function handleLogout() {
     await signOut(auth);
@@ -125,7 +133,7 @@ export function MobileNav() {
             onClick={() => setOpen(false)}
             className="font-semibold text-primary"
           >
-            Coffix
+            Coffix App Manager
           </Link>
           <button
             onClick={() => setOpen(false)}
@@ -158,6 +166,9 @@ export function MobileNav() {
         </nav>
 
         <div className="mt-auto border-t border-border p-3">
+          {user?.email && (
+            <p className="mb-1 px-3 text-xs text-gray-500 truncate">{user.email}</p>
+          )}
           <button
             onClick={handleLogout}
             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
