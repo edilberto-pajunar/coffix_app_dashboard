@@ -8,6 +8,8 @@ import { useGlobalSettingsStore } from "@/app/dashboard/globalSettings/store/use
 import { useNotificationStore } from "@/app/dashboard/notifications/store/useNotificationStore";
 import { useEmailTemplateStore } from "@/app/dashboard/emailTemplates/store/useEmailTemplateStore";
 import { useTransactionStore } from "@/app/dashboard/transactions/store/useTransactionStore";
+import { useCouponStore } from "@/app/dashboard/coupons/store/useCouponStore";
+import { useReferralStore } from "@/app/dashboard/referrals/store/useReferralStore";
 
 export function DataInitializer() {
   const listenToAll = useDashboardStore((s) => s.listenToAll);
@@ -19,6 +21,8 @@ export function DataInitializer() {
   const listenToTemplates = useEmailTemplateStore((s) => s.listenToTemplates);
   const listenToTransactions = useTransactionStore((s) => s.listenToTransactions);
   const listenToOrders = useTransactionStore((s) => s.listenToOrders);
+  const listenToCoupons = useCouponStore((s) => s.listenToCoupons);
+  const listenToReferrals = useReferralStore((s) => s.listenToReferrals);
 
   useEffect(() => {
     const unsubAll = listenToAll();
@@ -30,6 +34,8 @@ export function DataInitializer() {
     const unsubEmailTemplates = listenToTemplates();
     const unsubTransactions = listenToTransactions();
     const unsubOrders = listenToOrders();
+    const unsubCoupons = listenToCoupons();
+    const unsubReferrals = listenToReferrals();
     return () => {
       unsubAll();
       unsubStores();
@@ -40,6 +46,8 @@ export function DataInitializer() {
       unsubEmailTemplates();
       unsubTransactions();
       unsubOrders();
+      unsubCoupons();
+      unsubReferrals();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

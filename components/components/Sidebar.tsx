@@ -16,6 +16,8 @@ import {
   Bell,
   Mail,
   ArrowLeftRight,
+  Tag,
+  Share,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
@@ -35,6 +37,8 @@ const navItems = [
   { href: "/dashboard/notifications", label: "Campaigns", icon: Bell },
   { href: "/dashboard/globalSettings", label: "Global Settings", icon: Settings },
   { href: "/dashboard/emailTemplates", label: "Email Templates", icon: Mail },
+  { href: "/dashboard/referrals", label: "Referrals", icon: Share },
+  { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
 ];
 
 export function Sidebar() {

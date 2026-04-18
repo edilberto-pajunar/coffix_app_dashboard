@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useUserStore } from "../store/useUserStore";
+import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 import { UserService } from "@/app/dashboard/users/service/UserService";
 import { AppUser } from "../interface/user";
 import { formatDate, formatDateTime } from "@/app/utils/formatting";
@@ -64,6 +65,11 @@ type UserEditForm = {
   suburb: string;
   city: string;
   creditAvailable: string;
+  creditExpiry: string;
+  qrId: string;
+  preferredStoreId: string;
+  preferredStoreName: string;
+  appVersion: string;
   getPurchaseInfoByMail: boolean;
   getPromotions: boolean;
   allowWinACoffee: boolean;
@@ -83,6 +89,11 @@ function userToForm(user: AppUser): UserEditForm {
     suburb: user.suburb ?? "",
     city: user.city ?? "",
     creditAvailable: (user.creditAvailable ?? 0).toString(),
+    creditExpiry: firestoreTimestampToDateString(user.creditExpiry),
+    qrId: user.qrId ?? "",
+    preferredStoreId: user.preferredStoreId ?? "",
+    preferredStoreName: user.preferredStoreName ?? "",
+    appVersion: user.appVersion ?? "",
     getPurchaseInfoByMail: user.getPurchaseInfoByMail ?? false,
     getPromotions: user.getPromotions ?? false,
     allowWinACoffee: user.allowWinACoffee ?? false,
@@ -97,6 +108,7 @@ export default function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const router = useRouter();
   const users = useUserStore((s) => s.users);
+  const stores = useStoreStore((s) => s.stores);
   const user = users.find((u) => u.docId === userId);
 
   const [dialog, setDialog] = useState<DialogMode>(null);
@@ -139,10 +151,22 @@ export default function UserDetailPage() {
   async function handleUpdate() {
     if (!form || !user?.docId) return;
 
-    const birthdayDate = form.birthday
-      ? new Date(form.birthday + "T00:00:00")
-      : undefined;
+    const newErrors: Partial<Record<keyof UserEditForm, boolean>> = {};
 
+    if (form.qrId.trim() && !/^\d{4}-\d{4}-\d{4}-\d{4}$/.test(form.qrId.trim())) {
+      newErrors.qrId = true;
+    }
+    if (form.appVersion.trim() && !/^\d+\.\d+\.\d+\+\d+$/.test(form.appVersion.trim())) {
+      newErrors.appVersion = true;
+    }
+
+    if (Object.values(newErrors).some(Boolean)) {
+      setErrors(newErrors);
+      return;
+    }
+
+    const birthdayDate = form.birthday ? new Date(form.birthday + "T00:00:00") : undefined;
+    const creditExpiryDate = form.creditExpiry ? new Date(form.creditExpiry + "T00:00:00") : undefined;
     const creditParsed = parseFloat(form.creditAvailable);
 
     setLoading(true);
@@ -157,6 +181,11 @@ export default function UserDetailPage() {
         suburb: form.suburb.trim() || undefined,
         city: form.city.trim() || undefined,
         creditAvailable: isNaN(creditParsed) ? 0 : creditParsed,
+        creditExpiry: creditExpiryDate,
+        qrId: form.qrId.trim() || undefined,
+        preferredStoreId: form.preferredStoreId || undefined,
+        preferredStoreName: form.preferredStoreName || undefined,
+        appVersion: form.appVersion.trim() || undefined,
         getPurchaseInfoByMail: form.getPurchaseInfoByMail,
         getPromotions: form.getPromotions,
         allowWinACoffee: form.allowWinACoffee,
@@ -242,6 +271,7 @@ export default function UserDetailPage() {
             <InfoRow label="Doc ID" value={user.docId ?? "—"} mono />
             <InfoRow label="QR ID" value={user.qrId ?? "—"} mono />
             <InfoRow label="Credit Available" value={`$${(user.creditAvailable ?? 0).toFixed(2)}`} />
+            <InfoRow label="Credit Expiry" value={formatDate(user.creditExpiry)} />
             <InfoRow label="Created At" value={formatDateTime(user.createdAt)} />
             <InfoRow label="Last Login" value={formatDateTime(user.lastLogin)} />
             <div className="flex items-center justify-between px-4 py-3">
@@ -261,7 +291,7 @@ export default function UserDetailPage() {
         <InfoCard
           title="Preferences"
           rows={[
-            { label: "Preferred Store ID", value: user.preferredStoreId ?? "—", mono: true },
+            { label: "Preferred Store", value: user.preferredStoreName ?? user.preferredStoreId ?? "—" },
             { label: "Purchase Info by Mail", value: formatBool(user.getPurchaseInfoByMail) },
             { label: "Get Promotions", value: formatBool(user.getPromotions) },
             { label: "Allow Win a Coffee", value: formatBool(user.allowWinACoffee) },
@@ -368,6 +398,57 @@ export default function UserDetailPage() {
                     onChange={(e) => setField("creditAvailable", e.target.value)}
                   />
                 </div>
+                <div>
+                  <label className="mb-1.5 block text-xs text-light-grey">Credit Expiry</label>
+                  <input
+                    type="date"
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                    value={form.creditExpiry}
+                    onChange={(e) => setField("creditExpiry", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className={`mb-1.5 block text-xs ${errors.qrId ? "text-red-500" : "text-light-grey"}`}>
+                    QR ID {errors.qrId && <span className="text-red-500">— must be xxxx-xxxx-xxxx-xxxx (digits)</span>}
+                  </label>
+                  <input
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary font-mono ${errors.qrId ? "border-red-400" : "border-border"}`}
+                    placeholder="xxxx-xxxx-xxxx-xxxx"
+                    value={form.qrId}
+                    onChange={(e) => setField("qrId", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className={`mb-1.5 block text-xs ${errors.appVersion ? "text-red-500" : "text-light-grey"}`}>
+                    App Version {errors.appVersion && <span className="text-red-500">— must be x.x.x+x</span>}
+                  </label>
+                  <input
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary font-mono ${errors.appVersion ? "border-red-400" : "border-border"}`}
+                    placeholder="x.x.x+x"
+                    value={form.appVersion}
+                    onChange={(e) => setField("appVersion", e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-xs text-light-grey">Preferred Store</label>
+                  <select
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary bg-white"
+                    value={form.preferredStoreId}
+                    onChange={(e) => {
+                      const storeId = e.target.value;
+                      const store = stores.find((s) => s.docId === storeId);
+                      setForm((f) => f ? { ...f, preferredStoreId: storeId, preferredStoreName: store?.name ?? "" } : f);
+                      setErrors((er) => ({ ...er, preferredStoreId: false }));
+                    }}
+                  >
+                    <option value="">None</option>
+                    {stores.map((store) => (
+                      <option key={store.docId} value={store.docId}>
+                        {store.name ?? store.docId}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Boolean flags */}
@@ -402,11 +483,8 @@ export default function UserDetailPage() {
                   {[
                     { label: "Email", value: user.email ?? "—" },
                     { label: "Doc ID", value: user.docId ?? "—" },
-                    { label: "QR ID", value: user.qrId ?? "—" },
                     { label: "FCM Token", value: user.fcmToken ?? "—" },
-                    { label: "Preferred Store ID", value: user.preferredStoreId ?? "—" },
                     { label: "Email Verified", value: formatBool(user.emailVerified) },
-                    { label: "App Version", value: user.appVersion ?? "—" },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-center justify-between gap-4">
                       <span className="shrink-0 text-xs text-light-grey">{label}</span>

@@ -10,6 +10,7 @@ export interface AppUser {
   suburb?: string;
   city?: string;
   preferredStoreId?: string;
+  preferredStoreName?: string;
   createdAt?: Date;
   emailVerified?: boolean;
   getPurchaseInfoByMail?: boolean;
@@ -20,4 +21,5 @@ export interface AppUser {
   qrId?: string;
   fcmToken?: string;
   appVersion?: string;
+  creditExpiry?: Date;
 }

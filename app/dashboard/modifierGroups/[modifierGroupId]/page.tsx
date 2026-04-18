@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "../../products/store/useDashboardStore";
@@ -32,11 +32,30 @@ export default function ModifierGroupDetailPage() {
   const [modifierForm, setModifierForm] = useState<ModifierForm>(emptyModifierForm);
   const [activeModifierId, setActiveModifierId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [orderedModifiers, setOrderedModifiers] = useState<Modifier[]>([]);
+  const dragIndex = useRef<number | null>(null);
 
   const group = modifierGroups.find((g) => g.docId === modifierGroupId);
-  const groupModifiers = modifiers.filter((m) =>
-    group?.modifierIds?.includes(m.docId ?? ""),
-  );
+
+  useEffect(() => {
+    if (!group) return;
+    const sorted = (group.modifierIds ?? [])
+      .map((id) => modifiers.find((m) => m.docId === id))
+      .filter(Boolean) as Modifier[];
+    setOrderedModifiers(sorted);
+  }, [group?.modifierIds, modifiers]);
+
+  async function handleDrop(dropIndex: number) {
+    if (dragIndex.current === null || dragIndex.current === dropIndex) return;
+    const reordered = [...orderedModifiers];
+    const [moved] = reordered.splice(dragIndex.current, 1);
+    reordered.splice(dropIndex, 0, moved);
+    dragIndex.current = null;
+    setOrderedModifiers(reordered);
+    await ProductService.updateModifierGroup(group!.docId!, {
+      modifierIds: reordered.map((m) => m.docId!),
+    });
+  }
 
   function openEditGroup() {
     setGroupForm({
@@ -115,7 +134,7 @@ export default function ModifierGroupDetailPage() {
       if (dialog === "add-modifier") {
         if (modifierForm.isDefault) {
           await Promise.all(
-            groupModifiers.map((m) =>
+            orderedModifiers.map((m) =>
               ProductService.updateModifier(m.docId!, { isDefault: false }),
             ),
           );
@@ -132,7 +151,7 @@ export default function ModifierGroupDetailPage() {
       } else if (activeModifierId) {
         if (modifierForm.isDefault) {
           await Promise.all(
-            groupModifiers
+            orderedModifiers
               .filter((m) => m.docId !== activeModifierId)
               .map((m) =>
                 ProductService.updateModifier(m.docId!, { isDefault: false }),
@@ -227,6 +246,7 @@ export default function ModifierGroupDetailPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-background">
+                <th className="w-8 px-3 py-3" />
                 <th className="px-5 py-3 text-left font-medium text-light-grey">Label</th>
                 <th className="px-5 py-3 text-left font-medium text-light-grey">Price</th>
                 <th className="px-5 py-3 text-left font-medium text-light-grey">Cost</th>
@@ -235,15 +255,32 @@ export default function ModifierGroupDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {groupModifiers.length === 0 ? (
+              {orderedModifiers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
+                  <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
                     No modifiers yet.
                   </td>
                 </tr>
               ) : (
-                groupModifiers.map((m) => (
-                  <tr key={m.docId} className="transition-colors hover:bg-background">
+                orderedModifiers.map((m, i) => (
+                  <tr
+                    key={m.docId}
+                    draggable
+                    onDragStart={() => { dragIndex.current = i; }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handleDrop(i)}
+                    className="transition-colors hover:bg-background"
+                  >
+                    <td className="px-3 py-3">
+                      <svg className="h-4 w-4 shrink-0 cursor-grab text-light-grey active:cursor-grabbing" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="5.5" cy="3.5" r="1.25" />
+                        <circle cx="10.5" cy="3.5" r="1.25" />
+                        <circle cx="5.5" cy="8" r="1.25" />
+                        <circle cx="10.5" cy="8" r="1.25" />
+                        <circle cx="5.5" cy="12.5" r="1.25" />
+                        <circle cx="10.5" cy="12.5" r="1.25" />
+                      </svg>
+                    </td>
                     <td className="px-5 py-3 font-medium text-black">{m.label ?? "—"}</td>
                     <td className="px-5 py-3 text-primary">
                       ${Math.abs(m.priceDelta ?? 0).toFixed(2)}
