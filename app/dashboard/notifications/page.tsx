@@ -367,7 +367,7 @@ function CampaignDialog({
                       className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                         form.storeIds.includes(s.docId)
                           ? "border-primary bg-primary text-white"
-                          : "border-border text-black hover:bg-soft-grey"
+                          : "border-border text-black "
                       }`}
                     >
                       {s.name ?? s.docId}
@@ -664,14 +664,14 @@ function CampaignDialog({
         <div className="flex justify-end gap-3 border-t border-border px-6 py-4">
           <button
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm text-black transition-colors hover:bg-soft-grey"
+            className="rounded-lg px-4 py-2 text-sm text-black transition-colors "
           >
             Cancel
           </button>
           <button
             onClick={onSaveDraft}
             disabled={loading}
-            className="rounded-lg border border-border px-4 py-2 text-sm text-black transition-colors hover:bg-soft-grey disabled:opacity-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-black transition-colors  disabled:opacity-50"
           >
             Save as Draft
           </button>
@@ -1019,7 +1019,7 @@ export default function NotificationsPage() {
             <div className="mt-5 flex justify-end gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="rounded-lg px-4 py-2 text-sm text-black transition-colors hover:bg-soft-grey"
+                className="rounded-lg px-4 py-2 text-sm transition-colors "
               >
                 Cancel
               </button>

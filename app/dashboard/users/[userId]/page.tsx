@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useUserStore } from "../store/useUserStore";
 import { UserService } from "@/app/dashboard/users/service/UserService";
 import { AppUser } from "../interface/user";
-import { formatDateTime } from "@/app/utils/formatting";
+import { formatDate, formatDateTime } from "@/app/utils/formatting";
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
 function formatBool(value: boolean | undefined): string {
@@ -185,7 +185,7 @@ export default function UserDetailPage() {
             onClick={() => router.push("/dashboard/users")}
             className="mb-2 text-xs text-light-grey hover:text-black"
           >
-            ← Back to Users
+            ← Back to Customers
           </button>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold text-black">{displayName}</h1>
@@ -221,7 +221,7 @@ export default function UserDetailPage() {
             { label: "Nickname", value: user.nickName ?? "—" },
             { label: "Email", value: user.email ?? "—" },
             { label: "Mobile", value: user.mobile ?? "—" },
-            { label: "Birthday", value: formatDateTime(user.birthday) },
+            { label: "Birthday", value: formatDate(user.birthday) },
           ]}
         />
 
@@ -290,7 +290,7 @@ export default function UserDetailPage() {
           >
             {/* Dialog header */}
             <div className="border-b border-border px-6 py-4">
-              <h3 className="text-lg font-semibold text-black">Edit User</h3>
+              <h3 className="text-lg font-semibold text-black">Edit Customer</h3>
             </div>
 
             {/* Scrollable body */}
@@ -379,7 +379,6 @@ export default function UserDetailPage() {
                       { key: "getPromotions", label: "Get Promotions" },
                       { key: "allowWinACoffee", label: "Allow Win a Coffee" },
                       { key: "disabled", label: "Disabled" },
-                      { key: "emailVerified", label: "Email Verified" },
                     ] as { key: keyof UserEditForm; label: string }[]
                   ).map(({ key, label }) => (
                     <label key={key} className="flex cursor-pointer items-center justify-between px-3 py-2.5 hover:bg-[#fafafa]">
@@ -405,6 +404,7 @@ export default function UserDetailPage() {
                     { label: "QR ID", value: user.qrId ?? "—" },
                     { label: "FCM Token", value: user.fcmToken ?? "—" },
                     { label: "Preferred Store ID", value: user.preferredStoreId ?? "—" },
+                    { label: "Email Verified", value: formatBool(user.emailVerified) },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-center justify-between gap-4">
                       <span className="shrink-0 text-xs text-light-grey">{label}</span>

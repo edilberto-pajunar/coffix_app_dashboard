@@ -6,7 +6,7 @@ import { useEmailTemplateStore } from "./store/useEmailTemplateStore";
 import { EmailTemplateService } from "./service/EmailTemplateService";
 import { EmailTemplate } from "./interface/emailTemplate";
 import { useAuth } from "@/app/lib/AuthContext";
-import { formatDocId } from "@/app/utils/formatting";
+import { formatDateTime, formatDocId } from "@/app/utils/formatting";
 import { Button } from "@/components/ui/button";
 import { renderEmailTemplate } from "@/app/lib/renderEmailTemplate";
 import { sanitizeHtml } from "@/app/lib/sanitize";
@@ -258,7 +258,7 @@ function PreviewModal({ html, onClose }: { html: string; onClose: () => void }) 
         <div className="flex justify-end border-t border-border px-6 py-4">
           <button
             onClick={onClose}
-            className="rounded-lg border border-border px-4 py-2 text-sm text-black hover:bg-soft-grey"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-black "
           >
             Close Preview
           </button>
@@ -491,7 +491,7 @@ export default function EmailTemplatesPage() {
                       : "—"}
                   </td>
                   <td className="px-5 py-3 text-black">
-                    {template.updatedAt ? template.updatedAt.toDate().toLocaleDateString() : "—"}
+                    {template.updatedAt ? formatDateTime(template.updatedAt ): "—"}
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-2">

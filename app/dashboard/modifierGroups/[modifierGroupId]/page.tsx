@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useDashboardStore } from "../../products/store/useDashboardStore";
 import { Modifier } from "../../products/interface/modifier";
 import { ProductService } from "../../products/service/ProductService";
-import { formatCurrencyInput, stripCurrencySymbol } from "@/app/utils/formatting";
+import { formatCurrencyInput } from "@/app/utils/formatting";
 
 type DialogMode = "edit-group" | "delete-group" | "add-modifier" | "edit-modifier" | "delete-modifier" | null;
 
@@ -17,7 +17,7 @@ type ModifierForm = {
   isDefault: boolean;
 };
 
-const emptyModifierForm: ModifierForm = { label: "", priceDelta: "$0.00", cost: "$0.00", isDefault: false };
+const emptyModifierForm: ModifierForm = { label: "", priceDelta: "0.00", cost: "0.00", isDefault: false };
 
 export default function ModifierGroupDetailPage() {
   const { modifierGroupId } = useParams<{ modifierGroupId: string }>();
@@ -122,8 +122,8 @@ export default function ModifierGroupDetailPage() {
         }
         const ref = await ProductService.createModifier({
           label: modifierForm.label,
-          priceDelta: parseFloat(stripCurrencySymbol(modifierForm.priceDelta)) || 0,
-          cost: parseFloat(stripCurrencySymbol(modifierForm.cost)) || 0,
+          priceDelta: parseFloat(modifierForm.priceDelta) || 0,
+          cost: parseFloat(modifierForm.cost) || 0,
           isDefault: modifierForm.isDefault,
           groupId: group.docId,
         });
@@ -141,8 +141,8 @@ export default function ModifierGroupDetailPage() {
         }
         await ProductService.updateModifier(activeModifierId, {
           label: modifierForm.label,
-          priceDelta: parseFloat(stripCurrencySymbol(modifierForm.priceDelta)) || 0,
-          cost: parseFloat(stripCurrencySymbol(modifierForm.cost)) || 0,
+          priceDelta: parseFloat(modifierForm.priceDelta) || 0,
+          cost: parseFloat(modifierForm.cost) || 0,
           isDefault: modifierForm.isDefault,
         });
         toast.success("Modifier updated.");
@@ -359,13 +359,13 @@ export default function ModifierGroupDetailPage() {
                   <div>
                     <label className="mb-1 block text-xs text-light-grey">Price</label>
                     <div className="relative">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-light-grey">$</span>
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="w-full rounded-lg border border-border py-2 pl-7 pr-3 text-sm text-black outline-none focus:border-primary"
+                        className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
                         value={modifierForm.priceDelta}
-                        onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: stripCurrencySymbol(e.target.value) }))}
+                        onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: e.target.value }))}
                         onBlur={(e) => setModifierForm((f) => ({ ...f, priceDelta: formatCurrencyInput(e.target.value) }))}
                       />
                     </div>
@@ -373,13 +373,13 @@ export default function ModifierGroupDetailPage() {
                   <div>
                     <label className="mb-1 block text-xs text-light-grey">Cost</label>
                     <div className="relative">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-light-grey">$</span>
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-light-grey">$</span>
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="w-full rounded-lg border border-border py-2 pl-7 pr-3 text-sm text-black outline-none focus:border-primary"
+                        className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
                         value={modifierForm.cost}
-                        onChange={(e) => setModifierForm((f) => ({ ...f, cost: stripCurrencySymbol(e.target.value) }))}
+                        onChange={(e) => setModifierForm((f) => ({ ...f, cost: e.target.value }))}
                         onBlur={(e) => setModifierForm((f) => ({ ...f, cost: formatCurrencyInput(e.target.value) }))}
                       />
                     </div>

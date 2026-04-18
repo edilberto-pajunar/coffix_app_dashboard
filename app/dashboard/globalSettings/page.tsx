@@ -400,6 +400,7 @@ export default function GlobalSettingsPage() {
             value={form.minCreditToShare}
             onChange={setField("minCreditToShare")}
             placeholder="10"
+            prefix="$"
             suffix="credits"
           />
           <Field
