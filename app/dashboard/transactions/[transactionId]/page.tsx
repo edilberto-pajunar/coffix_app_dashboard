@@ -7,15 +7,6 @@ import { PaymentMethod } from "../interface/transaction";
 import { Item } from "../interface/order";
 import { formatDateTime } from "@/app/utils/formatting";
 
-function formatISO(value: string | Date | null | undefined): string {
-  if (!value) return "—";
-  const d = value instanceof Date ? value : new Date(value);
-  if (isNaN(d.getTime())) return "—";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const h = d.getHours();
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(h % 12 || 12)}:${pad(d.getMinutes())} ${h >= 12 ? "PM" : "AM"}`;
-}
-
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between px-4 py-3">
@@ -134,7 +125,7 @@ export default function TransactionDetailPage() {
             { label: "GST", value: tx.gst != null ? `${tx.gst}%` : "—" },
             { label: "GST Amount", value: tx.gstAmount != null ? `$${tx.gstAmount.toFixed(2)}` : "—" },
             { label: "GST Number", value: tx.gstNumber != null ? String(tx.gstNumber) : "—" },
-            { label: "Payment ID", value: tx.paymentId ?? "—", mono: true },
+            { label: "Windcave Session Id", value: tx.paymentId ?? "—", mono: true },
             { label: "Payment Time", value: formatDateTime(tx.paymentTime) },
             { label: "Created At", value: formatDateTime(tx.createdAt) },
           ]}
@@ -172,10 +163,9 @@ export default function TransactionDetailPage() {
               <InfoRow label="Order ID" value={order.docId ?? "—"} mono />
               <InfoRow label="Store" value={order.storeName ?? order.storeId ?? "—"} />
               <InfoRow label="Status" value={order.status ?? "—"} />
-              <InfoRow label="Payment Status" value={order.paymentStatus ?? "—"} />
               <InfoRow label="Amount" value={order.amount != null ? `$${order.amount.toFixed(2)}` : "—"} />
-              <InfoRow label="Scheduled At" value={formatISO(order.scheduledAt)} />
-              <InfoRow label="Created At" value={formatISO(order.createdAt)} />
+              <InfoRow label="Scheduled At" value={formatDateTime(order.scheduledAt)} />
+              <InfoRow label="Created At" value={formatDateTime(order.createdAt)} />
             </div>
 
             {/* Items table */}

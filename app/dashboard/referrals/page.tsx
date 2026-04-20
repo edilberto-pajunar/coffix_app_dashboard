@@ -109,7 +109,6 @@ export default function ReferralsPage() {
         </div>
         <Button
           size="sm"
-          variant="outline"
           onClick={() => exportCSV(filtered)}
           disabled={filtered.length === 0}
         >

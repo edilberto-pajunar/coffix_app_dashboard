@@ -6,6 +6,7 @@ import { useTransactionStore } from "./store/useTransactionStore";
 import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
 import { Transaction, PaymentMethod } from "./interface/transaction";
 import { formatDateTime } from "@/app/utils/formatting";
+import { Button } from "@/components/ui/button";
 
 function PaymentMethodBadge({ method }: { method: PaymentMethod | null | undefined }) {
   if (!method) return <span className="text-black">—</span>;
@@ -89,6 +90,34 @@ export default function TransactionsPage() {
   const sortIndicator = (key: SortKey) =>
     sortKey === key ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>;
 
+  function exportToCSV() {
+    const paymentLabels: Record<PaymentMethod, string> = {
+      coffixCredit: "Coffix Credit",
+      card: "Card",
+      wallet: "Wallet",
+    };
+    const escape = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
+    const headers = ["Transaction #", "Created At", "Payment Method", "Type", "Customer Email", "Amount", "Status", "Order ID"];
+    const rows = transactions.map((tx) => [
+      escape(tx.transactionNumber),
+      escape(formatDateTime(tx.createdAt)),
+      escape(tx.paymentMethod ? paymentLabels[tx.paymentMethod] : null),
+      escape(tx.type),
+      escape(getCustomerEmail(tx)),
+      escape(tx.amount != null ? String(tx.amount) : null),
+      escape(tx.status),
+      escape(tx.orderId),
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -98,6 +127,9 @@ export default function TransactionsPage() {
             {transactions.length} transaction{transactions.length !== 1 ? "s" : ""} total
           </p>
         </div>
+        <Button  size="sm" onClick={exportToCSV}>
+          Export CSV
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
