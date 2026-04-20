@@ -7,7 +7,6 @@ import { Plus, X } from "lucide-react";
 
 import { useNotificationStore } from "./store/useNotificationStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
-import { useStaffStore } from "@/app/dashboard/staffs/store/useStaffStore";
 import { useAuth } from "@/app/lib/AuthContext";
 import { NotificationService } from "./service/NotificationService";
 import {
@@ -336,10 +335,10 @@ function CampaignDialog({
                 </label>
               ))}
               {/* SMS — placeholder, not yet available */}
-              <label className="flex cursor-not-allowed items-center gap-2 opacity-50">
+              <label className="flex cursor-not-allowed items-center gap-2 opacity-60">
                 <input type="checkbox" disabled className="accent-primary" />
                 <span className="text-sm text-black">SMS</span>
-                <span className="rounded-full bg-soft-grey px-2 py-0.5 text-xs text-light-grey">
+                <span className="rounded-full px-2 py-0.5 text-xs text-light-grey">
                   Coming soon
                 </span>
               </label>
@@ -700,10 +699,8 @@ function CampaignDialog({
 export default function NotificationsPage() {
   const campaigns = useNotificationStore((s) => s.campaigns);
   const stores = useStoreStore((s) => s.stores);
-  const staffs = useStaffStore((s) => s.staffs);
-  const { user } = useAuth();
+  const { currentStaff, user } = useAuth();
 
-  const currentStaff = staffs.find((s) => s.docId === user?.uid);
   const isAdmin = currentStaff?.role === "admin";
 
   const [search, setSearch] = useState("");
@@ -837,6 +834,8 @@ export default function NotificationsPage() {
       setLoading(false);
     }
   }
+
+  console.log(isAdmin, currentStaff?.role ?? "no role");
 
   return (
     <div className="space-y-6">

@@ -34,7 +34,7 @@ const navItems = [
   { href: "/dashboard/users", label: "Customers", icon: Users },
   { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/dashboard/staffs", label: "Users", icon: UserCheck },
-  { href: "/dashboard/notifications", label: "Campaigns", icon: Bell },
+  // { href: "/dashboard/notifications", label: "Campaigns", icon: Bell },
   { href: "/dashboard/globalSettings", label: "Global Settings", icon: Settings },
   { href: "/dashboard/emailTemplates", label: "Email Templates", icon: Mail },
   { href: "/dashboard/referrals", label: "Referrals", icon: Share },

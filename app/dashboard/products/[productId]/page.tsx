@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { useStoreStore } from "../../stores/store/useStoreStore";
-import { useStaffStore } from "../../staffs/store/useStaffStore";
 import { useAuth } from "@/app/lib/AuthContext";
 import { Product } from "../interface/product";
 import { ProductService } from "../service/ProductService";
@@ -65,9 +64,7 @@ export default function ProductDetailPage() {
     const { productId } = useParams<{ productId: string }>();
     const router = useRouter();
 
-    const { user } = useAuth();
-    const staffs = useStaffStore((s) => s.staffs);
-    const currentStaff = staffs.find((s) => s.docId === user?.uid);
+    const { currentStaff } = useAuth();
     const isAdmin = currentStaff?.role === "admin";
 
     const products = useDashboardStore((s) => s.products);
