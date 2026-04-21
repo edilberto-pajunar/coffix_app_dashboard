@@ -26,25 +26,27 @@ import { WEBAPP_VERSION } from "@/app/utils/constant";
 import { useState } from "react";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/products", label: "Products", icon: Package },
-  { href: "/dashboard/categories", label: "Categories", icon: Layers },
-  { href: "/dashboard/stores", label: "Stores", icon: Store },
-  { href: "/dashboard/modifierGroups", label: "Modifier Groups", icon: Layers },
-  { href: "/dashboard/users", label: "Customers", icon: Users },
-  { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/dashboard/staffs", label: "Users", icon: UserCheck },
-  // { href: "/dashboard/notifications", label: "Campaigns", icon: Bell },
-  { href: "/dashboard/globalSettings", label: "Global Settings", icon: Settings },
-  { href: "/dashboard/emailTemplates", label: "Email Templates", icon: Mail },
-  { href: "/dashboard/referrals", label: "Referrals", icon: Share },
-  { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: true },
+  { href: "/dashboard/products", label: "Products", icon: Package, adminOnly: false },
+  { href: "/dashboard/categories", label: "Categories", icon: Layers, adminOnly: true },
+  { href: "/dashboard/stores", label: "Stores", icon: Store, adminOnly: false },
+  { href: "/dashboard/modifierGroups", label: "Modifier Groups", icon: Layers, adminOnly: true },
+  { href: "/dashboard/users", label: "Customers", icon: Users, adminOnly: true },
+  { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight, adminOnly: true },
+  { href: "/dashboard/staffs", label: "Users", icon: UserCheck, adminOnly: true },
+  // { href: "/dashboard/notifications", label: "Campaigns", icon: Bell, adminOnly: true },
+  { href: "/dashboard/globalSettings", label: "Global Settings", icon: Settings, adminOnly: true },
+  { href: "/dashboard/emailTemplates", label: "Email Templates", icon: Mail, adminOnly: true },
+  { href: "/dashboard/referrals", label: "Referrals", icon: Share, adminOnly: true },
+  { href: "/dashboard/coupons", label: "Coupons", icon: Tag, adminOnly: true },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, currentStaff } = useAuth();
+  const isAdmin = currentStaff?.role === "admin";
+  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   async function handleLogout() {
     await signOut(auth);
@@ -59,7 +61,7 @@ export function Sidebar() {
         </Link>
       </div>
       <nav className="flex flex-col gap-0.5 p-3">
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {visibleItems.map(({ href, label, icon: Icon }) => {
           const isActive =
             href === "/dashboard"
               ? pathname === "/dashboard"
@@ -98,7 +100,9 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, currentStaff } = useAuth();
+  const isAdmin = currentStaff?.role === "admin";
+  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   async function handleLogout() {
     await signOut(auth);
@@ -149,7 +153,7 @@ export function MobileNav() {
         </div>
 
         <nav className="flex flex-col gap-0.5 p-3">
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {visibleItems.map(({ href, label, icon: Icon }) => {
             const isActive =
               href === "/dashboard"
                 ? pathname === "/dashboard"

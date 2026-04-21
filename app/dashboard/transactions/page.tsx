@@ -17,7 +17,7 @@ function PaymentMethodBadge({ method }: { method: PaymentMethod | null | undefin
   };
   const labels: Record<PaymentMethod, string> = {
     coffixCredit: "Coffix Credit",
-    card: "Card",
+    card: "Credit Card",
     wallet: "Wallet",
   };
   return (
@@ -93,7 +93,7 @@ export default function TransactionsPage() {
   function exportToCSV() {
     const paymentLabels: Record<PaymentMethod, string> = {
       coffixCredit: "Coffix Credit",
-      card: "Card",
+      card: "Credit Card",
       wallet: "Wallet",
     };
     const escape = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
@@ -162,7 +162,7 @@ export default function TransactionsPage() {
               onClick={() => setMethodFilter(v)}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${methodFilter === v ? "border-primary bg-primary text-white" : "border-border text-black "}`}
             >
-              {v === "All" ? "All Methods" : v === "coffixCredit" ? "Coffix Credit" : v === "card" ? "Card" : "Wallet"}
+              {v === "All" ? "All Methods" : v === "coffixCredit" ? "Coffix Credit" : v === "card" ? "Credit Card" : "Wallet"}
             </button>
           ))}
         </div>

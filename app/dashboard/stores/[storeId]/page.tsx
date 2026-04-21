@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useStoreStore } from "../store/useStoreStore";
 import { isStoreOpenAt, DayHours, HolidayHours, Store } from "../interface/store";
 import { StoreService } from "../service/StoreService";
+import { formatTime } from "@/app/utils/formatting";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 type Day = typeof DAYS[number];
@@ -384,11 +385,11 @@ export default function StoreDetailPage() {
                           <span className="text-sm font-medium text-black">{dateLabel}</span>
                           {isPast && <span className="rounded-full bg-[#f0f0f0] px-2 py-0.5 text-[10px] text-black">Past</span>}
                         </div>
-                        {entry.title && <p className="text-xs text-light-grey">{entry.title}{entry.description ? ` — ${entry.description}` : ""}</p>}
+                        {entry.title && <p className="text-xs text-light-grey">{entry.title}{(entry.description) ? ` — ${entry.description}` : ""}</p>}
                       </div>
                       <div className="ml-4 flex items-center gap-3">
                         {entry.isOpen ? (
-                          <span className="text-sm text-black">{entry.open} – {entry.close}</span>
+                          <span className="text-sm text-black">{formatTime(entry.open)} – {formatTime(entry.close)}</span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-black px-2.5 py-1 text-xs font-medium text-white">
                             <span className="h-1.5 w-1.5 rounded-full bg-white" />
