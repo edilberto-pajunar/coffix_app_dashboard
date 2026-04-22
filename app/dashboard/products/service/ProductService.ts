@@ -67,11 +67,10 @@ export const ProductService = {
   deleteProduct: (docId: string) => deleteDoc(doc(db, "products", docId)),
 
   createModifier: async (data: Omit<Modifier, "docId">) => {
-    const docId = formatDocId(data.label ?? "");
-    const ref = doc(db, "modifiers", docId);
+    const ref = doc(collection(db, "modifiers"));
     await setDoc(ref, {
       ...data,
-      docId: docId, // optional: store the ID inside the document
+      docId: ref.id,
     });
     return ref;
   },
@@ -82,11 +81,10 @@ export const ProductService = {
   deleteModifier: (docId: string) => deleteDoc(doc(db, "modifiers", docId)),
 
   createModifierGroup: async (data: Omit<ModifierGroup, "docId">) => {
-    const docId = formatDocId(data.name ?? "");
-    const ref = doc(db, "modifierGroups", docId);
+    const ref = doc(collection(db, "modifierGroups"));
     await setDoc(ref, {
       ...data,
-      docId: docId, // optional: store the ID inside the document
+      docId: ref.id,
     });
     return ref;
   },
