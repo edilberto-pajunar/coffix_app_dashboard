@@ -18,6 +18,7 @@ import {
   ArrowLeftRight,
   Tag,
   Share,
+  FileText,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
@@ -39,6 +40,7 @@ const navItems = [
   { href: "/dashboard/emailTemplates", label: "Email Templates", icon: Mail, adminOnly: true },
   { href: "/dashboard/referrals", label: "Referrals", icon: Share, adminOnly: true },
   { href: "/dashboard/coupons", label: "Coupons", icon: Tag, adminOnly: true },
+  { href: "/dashboard/logs", label: "Logs", icon: FileText, adminOnly: true },
 ];
 
 export function Sidebar() {

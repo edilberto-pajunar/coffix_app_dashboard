@@ -10,6 +10,7 @@ import { useEmailTemplateStore } from "@/app/dashboard/emailTemplates/store/useE
 import { useTransactionStore } from "@/app/dashboard/transactions/store/useTransactionStore";
 import { useCouponStore } from "@/app/dashboard/coupons/store/useCouponStore";
 import { useReferralStore } from "@/app/dashboard/referrals/store/useReferralStore";
+import { useLogStore } from "@/app/dashboard/logs/store/useLogStore";
 
 export function DataInitializer() {
   const listenToAll = useDashboardStore((s) => s.listenToAll);
@@ -23,6 +24,7 @@ export function DataInitializer() {
   const listenToOrders = useTransactionStore((s) => s.listenToOrders);
   const listenToCoupons = useCouponStore((s) => s.listenToCoupons);
   const listenToReferrals = useReferralStore((s) => s.listenToReferrals);
+  const listenToLogs = useLogStore((s) => s.listenToLogs);
 
   useEffect(() => {
     const unsubAll = listenToAll();
@@ -36,6 +38,7 @@ export function DataInitializer() {
     const unsubOrders = listenToOrders();
     const unsubCoupons = listenToCoupons();
     const unsubReferrals = listenToReferrals();
+    const unsubLogs = listenToLogs();
     return () => {
       unsubAll();
       unsubStores();
@@ -48,6 +51,7 @@ export function DataInitializer() {
       unsubOrders();
       unsubCoupons();
       unsubReferrals();
+      unsubLogs();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
