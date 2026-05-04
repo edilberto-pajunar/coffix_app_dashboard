@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -14,7 +14,7 @@ const REASON_MESSAGES: Record<string, string> = {
   not_found: "This reset link is invalid. Please request a new one.",
 };
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
@@ -39,8 +39,7 @@ export default function ResetPasswordPage() {
     })
       .then((res) => res.json())
       .then((data) => {
-        console.log(data)
-        if (data.data.valid) {
+          if (data.data.valid) {
           setState("form");
         } else {
           setInvalidReason(
@@ -109,8 +108,6 @@ export default function ResetPasswordPage() {
       setState("form");
     }
   }
-
-  console.log(state)
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
@@ -216,5 +213,13 @@ export default function ResetPasswordPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
