@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useLogStore } from "./store/useLogStore";
 import { Log } from "./interface/log";
 import { formatDateTime } from "@/app/utils/formatting";
+import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
 
 const SEVERITY_STYLES: Record<string, string> = {
   error: "bg-red-100 text-red-700",
@@ -22,20 +23,27 @@ function SeverityBadge({ level }: { level?: string }) {
   );
 }
 
-function matches(log: Log, q: string): boolean {
-  return [log.action, log.category, log.page, log.notes, log.userId, log.customerId]
+function matches(log: Log, q: string, emailMap: Map<string | undefined, string | undefined>): boolean {
+  const email = emailMap.get(log.customerId ?? "");
+  return [log.action, log.category, log.page, log.notes, log.userId, log.customerId, email]
     .some((v) => v?.toLowerCase().includes(q));
 }
 
 export default function LogsPage() {
   const logs = useLogStore((s) => s.logs);
+  const users = useUserStore((s) => s.users);
   const [search, setSearch] = useState("");
+
+  const userEmailMap = useMemo(
+    () => new Map(users.map((u) => [u.docId, u.email])),
+    [users]
+  );
 
   const displayed = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return logs;
-    return logs.filter((log) => matches(log, q));
-  }, [logs, search]);
+    return logs.filter((log) => matches(log, q, userEmailMap));
+  }, [logs, search, userEmailMap]);
 
   return (
     <div className="space-y-6">
@@ -58,25 +66,26 @@ export default function LogsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-background">
-              <th className="px-5 py-3 text-left font-medium text-light-grey">Time</th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Email</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Action</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Category</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Severity</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Page</th>
               <th className="px-5 py-3 text-left font-medium text-light-grey">Notes</th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Time</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {displayed.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={7} className="px-5 py-10 text-center text-light-grey">
                   No logs found.
                 </td>
               </tr>
             ) : (
               displayed.map((log) => (
                 <tr key={log.docId} className="transition-colors hover:bg-background">
-                  <td className="px-5 py-3 text-black">{formatDateTime(log.time)}</td>
+                  <td className="px-5 py-3 text-black">{log.customerId ? (userEmailMap.get(log.customerId) ?? "N/A") : "N/A"}</td>
                   <td className="px-5 py-3 text-black">{log.action ?? "—"}</td>
                   <td className="px-5 py-3 text-black">{log.category ?? "—"}</td>
                   <td className="px-5 py-3">
@@ -84,6 +93,7 @@ export default function LogsPage() {
                   </td>
                   <td className="px-5 py-3 text-black">{log.page ?? "—"}</td>
                   <td className="px-5 py-3 text-black">{log.notes ?? "—"}</td>
+                  <td className="px-5 py-3 text-black">{formatDateTime(log.time)}</td>
                 </tr>
               ))
             )}

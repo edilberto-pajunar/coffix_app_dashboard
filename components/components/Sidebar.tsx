@@ -27,7 +27,7 @@ import { WEBAPP_VERSION } from "@/app/utils/constant";
 import { useState } from "react";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: true },
+  // { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: true },
   { href: "/dashboard/products", label: "Products", icon: Package, adminOnly: false },
   { href: "/dashboard/categories", label: "Categories", icon: Layers, adminOnly: true },
   { href: "/dashboard/stores", label: "Stores", icon: Store, adminOnly: false },

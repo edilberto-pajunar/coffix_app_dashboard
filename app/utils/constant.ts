@@ -34,7 +34,7 @@ export const EMAIL_VARIABLE_GROUPS: EmailVariableGroup[] = [
   {
     key: "otp",
     label: "OTP",
-    variables: ["otp_code", "expiry_time", "user_email"],
+    variables: ["otp_code", "expiry_time", "user_email", "reset_url"],
   },
   {
     key: "transaction",

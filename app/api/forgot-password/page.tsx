@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { sendPasswordResetEmail } from "firebase/auth";
 import { toast } from "sonner";
 import Link from "next/link";
-import { auth } from "@/app/lib/firebase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -14,12 +12,17 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await sendPasswordResetEmail(auth, email);
-      toast.success("Password reset email sent. Check your inbox.");
-      setEmail("");
-    } catch {
-      toast.error("Could not send reset email. Check the address and try again.");
+      await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/forgot-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        }
+      );
     } finally {
+      toast.success("If that email is registered, a reset link has been sent.");
+      setEmail("");
       setSubmitting(false);
     }
   }
