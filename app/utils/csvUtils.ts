@@ -2,15 +2,46 @@ export function escapeCSV(v: string): string {
   return `"${String(v).replace(/"/g, '""')}"`;
 }
 
+/** Serialize an array field as a JSON literal for a CSV cell. */
+export function formatArrayCell(value: unknown): string {
+  const arr = Array.isArray(value)
+    ? value.filter((v) => v !== null && v !== undefined)
+    : [];
+  return JSON.stringify(arr);
+}
+
+/** Parse an array cell: JSON first, pipe-delimited as a legacy fallback. */
+export function parseArrayCell(raw: string): string[] {
+  const t = (raw ?? "").trim();
+  if (!t) return [];
+  if (t.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(t);
+      if (Array.isArray(parsed)) {
+        return parsed.map((v) => String(v).trim()).filter(Boolean);
+      }
+    } catch {
+      // Not valid JSON — fall through to the legacy pipe format.
+    }
+  }
+  return t
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function parseCSVLine(line: string): string[] {
   return (
-    line.match(/("(?:[^"]|"")*"|[^,]*)/g)?.map((c) =>
-      c.replace(/^"|"$/g, "").replace(/""/g, '"')
-    ) ?? []
+    line
+      .match(/("(?:[^"]|"")*"|[^,]*)/g)
+      ?.map((c) => c.replace(/^"|"$/g, "").replace(/""/g, '"')) ?? []
   );
 }
 
-export function parseCSVText(text: string): { headers: string[]; rows: string[][] } {
+export function parseCSVText(text: string): {
+  headers: string[];
+  rows: string[][];
+} {
   const lines = text.split("\n").filter((l) => l.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
   const headers = parseCSVLine(lines[0]);

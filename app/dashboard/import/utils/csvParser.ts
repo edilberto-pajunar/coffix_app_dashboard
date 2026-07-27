@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { schemas, CollectionKey, FieldSpec } from "./importSchemas";
+import { parseArrayCell } from "@/app/utils/csvUtils";
 
 export type { CollectionKey } from "./importSchemas";
 
@@ -74,7 +75,7 @@ function coerce(key: string, val: string, spec: FieldSpec): { value: any } | { e
       return { value: val.trim() };
     }
     case "array": {
-      return { value: val.split("|").map((s) => s.trim()).filter(Boolean) };
+      return { value: parseArrayCell(val) };
     }
     case "string":
     default:

@@ -13,7 +13,13 @@ import {
   PRODUCT_IMPORTABLE_FIELDS,
   PRODUCT_REQUIRED_FIELDS,
 } from "./constants/productFieldConstants";
-import { escapeCSV, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
+import {
+  escapeCSV,
+  parseCSVText,
+  triggerCSVDownload,
+  formatArrayCell,
+  parseArrayCell,
+} from "@/app/utils/csvUtils";
 import Image from "next/image";
 import {
   Dialog,
@@ -400,9 +406,9 @@ export default function ProductsPage() {
         String(p.cost ?? ""),
         String(p.order ?? ""),
         escapeCSV(p.categoryId ?? ""),
-        escapeCSV((p.modifierGroupIds ?? []).join("|")),
-        escapeCSV((p.availableToStores ?? []).join("|")),
-        escapeCSV((p.disabledStores ?? []).join("|")),
+        escapeCSV(formatArrayCell(p.modifierGroupIds)),
+        escapeCSV(formatArrayCell(p.availableToStores)),
+        escapeCSV(formatArrayCell(p.disabledStores)),
         escapeCSV(p.imageUrl ?? ""),
       ].join(",")
     );
@@ -488,7 +494,7 @@ export default function ProductsPage() {
           }
 
           if (row.modifierGroupIds) {
-            const ids = row.modifierGroupIds.split("|").filter(Boolean);
+            const ids = parseArrayCell(row.modifierGroupIds);
             const invalid = ids.filter((id) => !existingModifierGroupIds.includes(id));
             if (invalid.length > 0) {
               errors.push({ row: rowNum, field: "modifierGroupIds", reason: `Unknown modifier group IDs: ${invalid.join(", ")}` });
@@ -497,7 +503,7 @@ export default function ProductsPage() {
           }
 
           if (row.availableToStores) {
-            const ids = row.availableToStores.split("|").filter(Boolean);
+            const ids = parseArrayCell(row.availableToStores);
             const invalid = ids.filter((id) => !existingStoreIds.includes(id));
             if (invalid.length > 0) {
               errors.push({ row: rowNum, field: "availableToStores", reason: `Unknown store IDs: ${invalid.join(", ")}` });
@@ -506,7 +512,7 @@ export default function ProductsPage() {
           }
 
           if (row.disabledStores) {
-            const ids = row.disabledStores.split("|").filter(Boolean);
+            const ids = parseArrayCell(row.disabledStores);
             const invalid = ids.filter((id) => !existingStoreIds.includes(id));
             if (invalid.length > 0) {
               errors.push({ row: rowNum, field: "disabledStores", reason: `Unknown store IDs: ${invalid.join(", ")}` });
@@ -539,9 +545,9 @@ export default function ProductsPage() {
         if (row.cost !== undefined && row.cost !== "") data.cost = parseFloat(row.cost);
         if (row.order !== undefined && row.order !== "") data.order = parseInt(row.order);
         if (row.categoryId) data.categoryId = row.categoryId;
-        if (row.modifierGroupIds !== undefined) data.modifierGroupIds = row.modifierGroupIds ? row.modifierGroupIds.split("|").filter(Boolean) : [];
-        if (row.availableToStores !== undefined) data.availableToStores = row.availableToStores ? row.availableToStores.split("|").filter(Boolean) : [];
-        if (row.disabledStores !== undefined) data.disabledStores = row.disabledStores ? row.disabledStores.split("|").filter(Boolean) : [];
+        if (row.modifierGroupIds !== undefined) data.modifierGroupIds = parseArrayCell(row.modifierGroupIds);
+        if (row.availableToStores !== undefined) data.availableToStores = parseArrayCell(row.availableToStores);
+        if (row.disabledStores !== undefined) data.disabledStores = parseArrayCell(row.disabledStores);
         if (row.imageUrl !== undefined) data.imageUrl = row.imageUrl;
 
         if (row.docId) {
