@@ -11,7 +11,14 @@ import {
   STAFF_PROTECTED_FIELDS,
   STAFF_IMPORTABLE_FIELDS,
 } from "./constants/staffFieldConstants";
-import { escapeCSV, tsToISO, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
+import {
+  escapeCSV,
+  tsToISO,
+  parseCSVText,
+  triggerCSVDownload,
+  formatArrayCell,
+  parseArrayCell,
+} from "@/app/utils/csvUtils";
 import {
   Dialog,
   DialogContent,
@@ -332,7 +339,7 @@ export default function StaffsPage() {
         escapeCSV(s.email),
         escapeCSV(tsToISO(s.createdAt)),
         escapeCSV(s.role),
-        escapeCSV((s.storeIds ?? []).filter(Boolean).join("|")),
+        escapeCSV(formatArrayCell((s.storeIds ?? []).filter(Boolean))),
         String(s.disabled ?? false),
         escapeCSV(s.firstName ?? ""),
         escapeCSV(s.lastName ?? ""),
@@ -391,7 +398,7 @@ export default function StaffsPage() {
           }
 
           if (row.storeIds) {
-            const ids = row.storeIds.split("|").filter(Boolean);
+            const ids = parseArrayCell(row.storeIds);
             const invalid = ids.filter((id) => !storeIds.includes(id));
             if (invalid.length > 0) {
               errors.push({ row: rowNum, field: "storeIds", reason: `Store(s) not found: ${invalid.join(", ")}` });
@@ -426,7 +433,7 @@ export default function StaffsPage() {
       for (const row of importPreview.validRows) {
         const update: Partial<Omit<Staff, "docId">> = {};
         if (row.role) update.role = row.role as StaffRole;
-        if (row.storeIds !== undefined) update.storeIds = row.storeIds ? row.storeIds.split("|").filter(Boolean) : [];
+        if (row.storeIds !== undefined) update.storeIds = parseArrayCell(row.storeIds);
         if (row.disabled !== undefined && row.disabled !== "") update.disabled = row.disabled.toLowerCase() === "true";
         if (row.firstName !== undefined) update.firstName = row.firstName;
         if (row.lastName !== undefined) update.lastName = row.lastName;

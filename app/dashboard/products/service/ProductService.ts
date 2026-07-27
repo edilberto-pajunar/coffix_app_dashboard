@@ -24,10 +24,28 @@ function snapToArray<T>(
   return snapshot.docs.map((d) => ({ ...d.data(), docId: d.id })) as T[];
 }
 
+// Firestore docs may carry legacy or hand-edited values where an array field is
+// a string (or missing entirely), so coerce before the UI calls array methods.
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value))
+    return value.filter((v): v is string => typeof v === "string");
+  if (typeof value === "string") return value ? [value] : [];
+  return [];
+}
+
+function normalizeProduct(product: Product): Product {
+  return {
+    ...product,
+    availableToStores: toStringArray(product.availableToStores),
+    disabledStores: toStringArray(product.disabledStores),
+    modifierGroupIds: toStringArray(product.modifierGroupIds),
+  };
+}
+
 export const ProductService = {
   listenToProducts: (onUpdate: (products: Product[]) => void): Unsubscribe =>
     onSnapshot(collection(db, "products"), (snap) =>
-      onUpdate(snapToArray<Product>(snap)),
+      onUpdate(snapToArray<Product>(snap).map(normalizeProduct)),
     ),
 
   listenToModifiers: (onUpdate: (modifiers: Modifier[]) => void): Unsubscribe =>

@@ -9,7 +9,7 @@ import { useNotificationStore } from "./store/useNotificationStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
 import { NotificationService } from "./service/NotificationService";
-import { escapeCSV, tsToISO, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { escapeCSV, tsToISO, triggerCSVDownload, formatArrayCell } from "@/app/utils/csvUtils";
 import {
   NotificationCampaign,
   NotificationChannel,
@@ -745,7 +745,7 @@ export default function NotificationsPage() {
         escapeCSV(c.docId ?? ""),
         escapeCSV(c.name),
         escapeCSV(c.status),
-        escapeCSV(c.channels.join("|")),
+        escapeCSV(formatArrayCell(c.channels)),
         escapeCSV(tsToISO(c.createdAt)),
         escapeCSV(c.sentAt ? tsToISO(c.sentAt) : ""),
       ].join(",")

@@ -1,4 +1,5 @@
 import { schemas, CollectionKey, COLLECTION_KEYS } from "./importSchemas";
+import { escapeCSV, formatArrayCell } from "@/app/utils/csvUtils";
 
 /** Human-friendly labels; falls back to a title-cased key for anything not listed. */
 const LABEL_OVERRIDES: Partial<Record<CollectionKey, string>> = {
@@ -22,9 +23,21 @@ export function templateHeaders(collection: CollectionKey): string[] {
   return ["docId", ...keys];
 }
 
+/**
+ * A single example row. Array columns show an empty JSON array so the expected
+ * format (`["id1","id2"]`) is discoverable when the template is opened in Excel;
+ * every other column is left blank.
+ */
+function templateExampleRow(collection: CollectionKey, headers: string[]): string {
+  const fields = schemas[collection].fields;
+  return headers
+    .map((h) => (fields[h]?.type === "array" ? escapeCSV(formatArrayCell([])) : ""))
+    .join(",");
+}
+
 export function generateTemplate(collection: CollectionKey): void {
   const headers = templateHeaders(collection);
-  const csv = headers.join(",") + "\n";
+  const csv = [headers.join(","), templateExampleRow(collection, headers)].join("\n") + "\n";
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
