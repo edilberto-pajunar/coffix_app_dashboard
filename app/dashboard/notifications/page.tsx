@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
 import { Plus, X } from "lucide-react";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import { useNotificationStore } from "./store/useNotificationStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
@@ -325,19 +326,18 @@ function CampaignDialog({
             </label>
             <div className="flex flex-wrap gap-4">
               {(["in_app", "popup", "email"] as NotificationChannel[]).map((ch) => (
-                <label key={ch} className="flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
+                <label key={ch} htmlFor={`channel-${ch}`} className="flex cursor-pointer items-center gap-2">
+                  <Checkbox
+                    id={`channel-${ch}`}
                     checked={form.channels.includes(ch)}
-                    onChange={() => toggleChannel(ch)}
-                    className="accent-primary"
+                    onCheckedChange={() => toggleChannel(ch)}
                   />
                   <span className="text-sm text-black">{CHANNEL_LABELS[ch]}</span>
                 </label>
               ))}
               {/* SMS — placeholder, not yet available */}
               <label className="flex cursor-not-allowed items-center gap-2 opacity-60">
-                <input type="checkbox" disabled className="accent-primary" />
+                <Checkbox disabled checked={false} />
                 <span className="text-sm text-black">SMS</span>
                 <span className="rounded-full px-2 py-0.5 text-xs text-light-grey">
                   Coming soon

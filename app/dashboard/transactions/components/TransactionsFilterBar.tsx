@@ -2,6 +2,7 @@
 
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { DateInput } from "@/components/ui/DateInput";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { ChevronDownIcon } from "lucide-react";
 
@@ -138,12 +139,12 @@ export function TransactionsFilterBar({
               >
                 <div className="flex flex-col gap-1 p-1">
                   {STATUS_OPTIONS.map(({ value, label }) => (
-                    <label key={value} className="flex items-center gap-2 text-sm text-black cursor-pointer">
-                      <input
-                        type="checkbox"
+                    <label key={value} htmlFor={`status-${value}`} className="flex items-center gap-2 text-sm text-black cursor-pointer">
+                      <Checkbox
+                        id={`status-${value}`}
                         checked={filterStatus.has(value)}
-                        onChange={() => toggleStatus(value)}
-                        className="h-3.5 w-3.5 accent-primary"
+                        onCheckedChange={() => toggleStatus(value)}
+                        className="size-3.5"
                       />
                       {label}
                     </label>

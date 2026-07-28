@@ -5,12 +5,16 @@ import { useLogStore } from "./store/useLogStore";
 import { Log } from "./interface/log";
 import { formatDateTime } from "@/app/utils/formatting";
 import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
+import { useStaffStore } from "@/app/dashboard/staffs/store/useStaffStore";
 import { escapeCSV, tsToISO, triggerCSVDownload } from "@/app/utils/csvUtils";
 import { Button } from "@/components/ui/button";
 import { LogsFilterBar } from "./components/LogsFilterBar";
 import { LogSettingsDialog } from "./components/LogSettingsDialog";
+import { Pagination } from "@/components/ui/pagination";
 
 type DateRange = { from: string; to: string };
+
+const PAGE_SIZE = 50;
 
 function dateInRange(value: Date | undefined, from: string, to: string): boolean {
   if (!from && !to) return true;
@@ -51,8 +55,28 @@ function SeverityBadge({ level }: { level?: number }) {
   );
 }
 
-function matches(log: Log, q: string, emailMap: Map<string | undefined, string | undefined>): boolean {
-  const email = emailMap.get(log.customerId ?? "");
+/**
+ * Logs are written by both customers (customerId) and staff (userId), so fall
+ * back to the staff email when the row has no resolvable customer email.
+ */
+function resolveEmail(
+  log: Log,
+  userEmailMap: Map<string | undefined, string | undefined>,
+  staffEmailMap: Map<string, string>
+): string | undefined {
+  return (
+    (log.customerId ? userEmailMap.get(log.customerId) : undefined) ??
+    (log.userId ? staffEmailMap.get(log.userId) : undefined)
+  );
+}
+
+function matches(
+  log: Log,
+  q: string,
+  userEmailMap: Map<string | undefined, string | undefined>,
+  staffEmailMap: Map<string, string>
+): boolean {
+  const email = resolveEmail(log, userEmailMap, staffEmailMap);
   return [log.action, log.category, log.page, log.notes, log.userId, log.customerId, email]
     .some((v) => v?.toLowerCase().includes(q));
 }
@@ -61,6 +85,7 @@ export default function LogsPage() {
   const logs = useLogStore((s) => s.logs);
   const logSettings = useLogStore((s) => s.logSettings);
   const users = useUserStore((s) => s.users);
+  const staffs = useStaffStore((s) => s.staffs);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
@@ -69,10 +94,16 @@ export default function LogsPage() {
   const [filterPage, setFilterPage] = useState("");
   const [filterNotes, setFilterNotes] = useState("");
   const [filterTime, setFilterTime] = useState<DateRange>({ from: "", to: "" });
+  const [currentPage, setCurrentPage] = useState(1);
 
   const userEmailMap = useMemo(
     () => new Map(users.map((u) => [u.docId, u.email])),
     [users]
+  );
+
+  const staffEmailMap = useMemo(
+    () => new Map(staffs.map((s) => [s.docId, s.email])),
+    [staffs]
   );
 
   const uniqueCategories = useMemo(() => uniqueValues(logs, (l) => l.category), [logs]);
@@ -106,7 +137,7 @@ export default function LogsPage() {
     const page = filterPage.trim().toLowerCase();
     const notes = filterNotes.trim().toLowerCase();
     return logs.filter((log) => {
-      if (q && !matches(log, q, userEmailMap)) return false;
+      if (q && !matches(log, q, userEmailMap, staffEmailMap)) return false;
       if (filterCategory !== "All" && log.category !== filterCategory) return false;
       if (filterAction !== "All" && log.action !== filterAction) return false;
       if (filterSeverity !== "" && log.severityLevel !== filterSeverity) return false;
@@ -115,7 +146,17 @@ export default function LogsPage() {
       if (!dateInRange(log.time, filterTime.from, filterTime.to)) return false;
       return true;
     });
-  }, [logs, search, filterCategory, filterAction, filterSeverity, filterPage, filterNotes, filterTime, userEmailMap]);
+  }, [logs, search, filterCategory, filterAction, filterSeverity, filterPage, filterNotes, filterTime, userEmailMap, staffEmailMap]);
+
+  // Filtering can shrink the results out from under the selected page, so clamp
+  // during render rather than correcting it afterwards in an effect.
+  const pageCount = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, pageCount);
+
+  const paginated = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return displayed.slice(start, start + PAGE_SIZE);
+  }, [displayed, safePage]);
 
   function exportToCSV() {
     const headers = ["docId", "time", "page", "category", "severityLevel", "action", "notes", "customerId", "userId"];
@@ -195,12 +236,12 @@ export default function LogsPage() {
                 </td>
               </tr>
             ) : (
-              displayed.map((log) => (
+              paginated.map((log) => (
                 <tr
                   key={log.docId}
                   className="transition-colors hover:bg-background"
                 >
-                  <td className="px-5 py-3 text-black">{log.customerId ? (userEmailMap.get(log.customerId) ?? "N/A") : "N/A"}</td>
+                  <td className="px-5 py-3 text-black">{resolveEmail(log, userEmailMap, staffEmailMap) ?? "N/A"}</td>
                   <td className="px-5 py-3 text-black">{log.action ?? "—"}</td>
                   <td className="px-5 py-3 text-black">{log.category ?? "—"}</td>
                   <td className="px-5 py-3">
@@ -214,6 +255,14 @@ export default function LogsPage() {
             )}
           </tbody>
         </table>
+
+        <Pagination
+          currentPage={safePage}
+          totalItems={displayed.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          className="border-t border-border"
+        />
       </div>
     </div>
   );

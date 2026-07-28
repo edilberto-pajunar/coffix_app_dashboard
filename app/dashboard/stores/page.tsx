@@ -6,14 +6,17 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { useStoreStore } from "./store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
-import { isStoreOpenAt, DayHours } from "./interface/store";
+import { isStoreOpenAt, DayHours, Store, formatLocation, isValidCoordinate } from "./interface/store";
 import { StoreService } from "./service/StoreService";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 import {
   STORE_PROTECTED_FIELDS,
   STORE_IMPORTABLE_FIELDS,
 } from "./constants/storeFieldConstants";
 import { escapeCSV, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { EnumChip } from "@/components/ui/StatusChip";
 import {
@@ -39,7 +42,8 @@ type StoreForm = {
   name: string;
   email: string;
   contactNumber: string;
-  location: string;
+  lat: string;
+  lng: string;
   address: string;
   city: string;
   imageUrl: string;
@@ -55,7 +59,8 @@ const emptyForm: StoreForm = {
   name: "",
   email: "",
   contactNumber: "",
-  location: "",
+  lat: "",
+  lng: "",
   address: "",
   city: "",
   imageUrl: "",
@@ -66,7 +71,7 @@ const emptyForm: StoreForm = {
 };
 
 const REQUIRED: (keyof Omit<StoreForm, "openingHours">)[] = [
-  "name", "email", "contactNumber", "location", "address", "printerId",
+  "name", "email", "contactNumber", "address", "printerId",
   "gstNumber", "invoiceText",
 ];
 
@@ -76,6 +81,7 @@ export default function StoresPage() {
 
   const { currentStaff } = useAuth();
   const isAdmin = currentStaff?.role === "admin";
+  const { log } = useActivityLog();
 
   // Store managers only see the stores they're assigned to.
   const stores = useMemo(() => {
@@ -308,6 +314,13 @@ export default function StoresPage() {
         await StoreService.updateStore(row.docId, update);
         count++;
       }
+      log({
+        category: LOG_CATEGORY.IMPORT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Import Stores",
+        notes: `Admin updated ${count} store${count !== 1 ? "s" : ""} via CSV`,
+        page: LOG_PAGE.STORES,
+      });
       toast.success(`Updated ${count} store${count !== 1 ? "s" : ""}.`);
       setImportPreview(null);
     } catch {
@@ -320,8 +333,17 @@ export default function StoresPage() {
   async function handleDeleteStore() {
     if (!deleteStoreId) return;
     setDeleteLoading(true);
+    // Resolved before the delete — the store leaves the list once it's gone.
+    const storeName = stores.find((s) => s.docId === deleteStoreId)?.name ?? deleteStoreId;
     try {
       await StoreService.deleteStore(deleteStoreId);
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Delete Store",
+        notes: `Admin deleted a store ${storeName}`,
+        page: LOG_PAGE.STORES,
+      });
       toast.success("Store deleted.");
       setDeleteStoreId(null);
     } catch (err) {
@@ -329,6 +351,23 @@ export default function StoresPage() {
       toast.error("Failed to delete store. Please try again.");
     } finally {
       setDeleteLoading(false);
+    }
+  }
+
+  async function handleToggleDisable(store: Store, checked: boolean) {
+    try {
+      await StoreService.updateStore(store.docId, { disable: !checked });
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Toggle Store Disabled",
+        notes: `Admin ${checked ? "enabled" : "disabled"} a store ${store.name ?? store.docId}`,
+        page: LOG_PAGE.STORES,
+      });
+      toast.success(checked ? "Store enabled." : "Store disabled.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update store. Please try again.");
     }
   }
 
@@ -340,6 +379,14 @@ export default function StoresPage() {
     if (Object.values(newErrors).some(Boolean)) {
       setErrors(newErrors);
       toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    const latInvalid = !isValidCoordinate(form.lat, 90);
+    const lngInvalid = !isValidCoordinate(form.lng, 180);
+    if (latInvalid || lngInvalid) {
+      setErrors({ ...newErrors, lat: latInvalid, lng: lngInvalid });
+      toast.error("Please enter a valid latitude and longitude.");
       return;
     }
 
@@ -357,7 +404,7 @@ export default function StoresPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         contactNumber: form.contactNumber.trim(),
-        location: form.location.trim(),
+        location: formatLocation(form.lat, form.lng),
         address: form.address.trim(),
         city: form.city.trim() || null,
         imageUrl: form.imageUrl.trim() || null,
@@ -366,6 +413,13 @@ export default function StoresPage() {
         printerId: form.printerId.trim(),
         openingHours,
         disable: false,
+      });
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Create Store",
+        notes: `Admin added new store ${form.name.trim()}`,
+        page: LOG_PAGE.STORES,
       });
       toast.success("Store created successfully.");
       closeDialog();
@@ -511,9 +565,7 @@ export default function StoresPage() {
                         <div className="flex items-center gap-2">
                           <Switch
                             checked={!isDisabled}
-                            onCheckedChange={(checked) =>
-                              StoreService.updateStore(store.docId, { disable: !checked })
-                            }
+                            onCheckedChange={(checked) => handleToggleDisable(store, checked)}
                           />
                         </div>
                       ) : (
@@ -598,15 +650,28 @@ export default function StoresPage() {
                   {errors.contactNumber && <p className="mt-1 text-xs text-error">Required.</p>}
                 </div>
 
-                <div className="col-span-2">
-                  <label className="mb-1.5 block text-xs text-light-grey">Location *</label>
-                  <input
-                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.location ? "border-error" : "border-border"}`}
-                    placeholder="e.g. Makati City"
-                    value={form.location}
-                    onChange={(e) => setField("location", e.target.value)}
-                  />
-                  {errors.location && <p className="mt-1 text-xs text-error">Required.</p>}
+                <div className="col-span-2 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs text-light-grey">Latitude *</label>
+                    <input
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.lat ? "border-error" : "border-border"}`}
+                      placeholder="e.g. 31.00"
+                      value={form.lat}
+                      onChange={(e) => setField("lat", e.target.value)}
+                    />
+                    {errors.lat && <p className="mt-1 text-xs text-error">Enter a number between -90 and 90.</p>}
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs text-light-grey">Longitude *</label>
+                    <input
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.lng ? "border-error" : "border-border"}`}
+                      placeholder="e.g. 33.00"
+                      value={form.lng}
+                      onChange={(e) => setField("lng", e.target.value)}
+                    />
+                    {errors.lng && <p className="mt-1 text-xs text-error">Enter a number between -180 and 180.</p>}
+                  </div>
                 </div>
 
                 <div className="col-span-2">
@@ -673,12 +738,14 @@ export default function StoresPage() {
                         key={day}
                         className={`flex items-center gap-3 px-3 py-2.5 ${i !== DAYS.length - 1 ? "border-b border-border" : ""} ${!hours.isOpen ? "opacity-50" : ""}`}
                       >
-                        <label className="flex w-28 shrink-0 cursor-pointer items-center gap-2 text-sm font-medium text-black capitalize">
-                          <input
-                            type="checkbox"
+                        <label
+                          htmlFor={`day-${day}`}
+                          className="flex w-28 shrink-0 cursor-pointer items-center gap-2 text-sm font-medium text-black capitalize"
+                        >
+                          <Checkbox
+                            id={`day-${day}`}
                             checked={hours.isOpen}
-                            onChange={(e) => setDayHours(day, { isOpen: e.target.checked })}
-                            className="accent-primary"
+                            onCheckedChange={(c) => setDayHours(day, { isOpen: c === true })}
                           />
                           {day}
                         </label>

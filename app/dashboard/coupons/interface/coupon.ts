@@ -8,4 +8,5 @@ export interface Coupon {
   notes?: string;
   type?: string; // referral | admin
   userId?: string;
+  updatedAt?: Date;
 }

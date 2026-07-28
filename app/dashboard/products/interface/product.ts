@@ -9,4 +9,6 @@ export interface Product {
   order?: number;
   price?: number;
   disabledStores?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }

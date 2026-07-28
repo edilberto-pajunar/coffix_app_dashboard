@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useUserStore } from "./store/useUserStore";
@@ -22,9 +22,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { UsersFilterBar } from "./components/UsersFilterBar";
 import { AddCouponDialog } from "@/app/dashboard/coupons/components/AddCouponDialog";
 import BulkUpdateFlagsDialog, { type FlagKey } from "./components/BulkUpdateFlagsDialog";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
 function dateInRange(value: Date | undefined, from: string, to: string): boolean {
   if (!from && !to) return true;
@@ -88,33 +91,6 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-function IndeterminateCheckbox({
-  checked,
-  indeterminate,
-  onChange,
-  onClick,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  onChange: () => void;
-  onClick?: (e: React.MouseEvent) => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      onClick={onClick}
-      className="h-4 w-4 cursor-pointer accent-primary"
-    />
-  );
-}
-
 const FLAG_KEYS: FlagKey[] = [
   "getPurchaseInfoByMail", "getPromotions", "allowWinACoffee",
   "disabled", "scheduleOrder", "shareCredit", "withdrawBalance", "coffixCreditAvailable",
@@ -172,6 +148,7 @@ export default function UsersPage() {
   const [filterCreditAvailable, setFilterCreditAvailable] = useState<NumberRange>({ min: "", max: "" });
   const [filterBirthMonth, setFilterBirthMonth] = useState<string>("All");
 
+  const { log } = useActivityLog();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddCredits, setShowAddCredits] = useState(false);
   const [showAddCoupon, setShowAddCoupon] = useState(false);
@@ -470,6 +447,13 @@ export default function UsersPage() {
         await UserService.updateUser(row.docId, update);
         count++;
       }
+      log({
+        category: LOG_CATEGORY.IMPORT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Import Customers",
+        notes: `Admin updated ${count} customer${count !== 1 ? "s" : ""} via CSV`,
+        page: LOG_PAGE.CUSTOMERS,
+      });
       toast.success(`Updated ${count} user(s).`);
       setImportPreview(null);
     } catch {
@@ -479,12 +463,22 @@ export default function UsersPage() {
     }
   }
 
+  // No try/catch by design — BulkUpdateFlagsDialog owns the toasts and needs
+  // the rejection to propagate.
   async function handleBulkUpdateFlags(flags: Partial<AppUser>) {
+    const affectedCount = selectedIds.size;
     await Promise.all(
       Array.from(selectedIds).map((docId) =>
         UserService.updateUser(docId, flags)
       )
     );
+    log({
+      category: LOG_CATEGORY.CUSTOMERS,
+      severityLevel: LOG_SEVERITY.HIGH,
+      action: "Bulk Update Customer Flags",
+      notes: `Admin bulk updated ${Object.keys(flags).join(", ")} for ${affectedCount} customer${affectedCount !== 1 ? "s" : ""}`,
+      page: LOG_PAGE.CUSTOMERS,
+    });
   }
 
   async function handleAddCredits() {
@@ -494,6 +488,8 @@ export default function UsersPage() {
       return;
     }
     setCreditLoading(true);
+    // Captured before clearSelection() empties the set.
+    const affectedCount = selectedIds.size;
     try {
       const res = await fetch("/api/credit/add", {
         method: "POST",
@@ -504,7 +500,14 @@ export default function UsersPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error ?? data?.message ?? `Error ${res.status}`);
       }
-      toast.success(`Added $${amount.toFixed(2)} credits to ${selectedIds.size} user(s).`);
+      log({
+        category: LOG_CATEGORY.CUSTOMERS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Add Customer Credits",
+        notes: `Admin added $${amount.toFixed(2)} credits to ${affectedCount} customer${affectedCount !== 1 ? "s" : ""}`,
+        page: LOG_PAGE.CUSTOMERS,
+      });
+      toast.success(`Added $${amount.toFixed(2)} credits to ${affectedCount} user(s).`);
       setShowAddCredits(false);
       setCreditAmount("");
       clearSelection();
@@ -615,10 +618,9 @@ export default function UsersPage() {
           <thead>
             <tr className="border-b border-border bg-background">
               <th className="w-10 px-5 py-3">
-                <IndeterminateCheckbox
-                  checked={allSelected}
-                  indeterminate={someSelected}
-                  onChange={toggleSelectAll}
+                <Checkbox
+                  checked={someSelected ? "indeterminate" : allSelected}
+                  onCheckedChange={toggleSelectAll}
                 />
               </th>
               <th
@@ -661,12 +663,10 @@ export default function UsersPage() {
                         toggleUser(user.docId!);
                       }}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={isSelected}
-                        onChange={() => toggleUser(user.docId!)}
+                        onCheckedChange={() => toggleUser(user.docId!)}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-4 w-4 cursor-pointer accent-primary"
                       />
                     </td>
                     <td className="px-5 py-3">

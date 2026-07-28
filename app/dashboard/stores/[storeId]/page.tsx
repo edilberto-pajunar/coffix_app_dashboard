@@ -6,11 +6,14 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { useStoreStore } from "../store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
-import { isStoreOpenAt, DayHours, HolidayHours, Store } from "../interface/store";
+import { isStoreOpenAt, DayHours, HolidayHours, Store, parseLocation, formatLocation, isValidCoordinate } from "../interface/store";
 import { StoreService } from "../service/StoreService";
 import { formatTime } from "@/app/utils/formatting";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ImageUploadField } from "@/components/components/ImageUploadField";
+import { useActivityLog } from "../../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../../logs/constants/logConstants";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 type Day = typeof DAYS[number];
@@ -20,7 +23,8 @@ type StoreEditForm = {
   name: string;
   email: string;
   contactNumber: string;
-  location: string;
+  lat: string;
+  lng: string;
   address: string;
   city: string;
   imageUrl: string;
@@ -31,7 +35,7 @@ type StoreEditForm = {
 };
 
 const REQUIRED: (keyof Omit<StoreEditForm, "openingHours">)[] = [
-  "name", "email", "contactNumber", "location", "address", "printerId",
+  "name", "email", "contactNumber", "address", "printerId",
   "gstNumber", "invoiceText",
 ];
 
@@ -63,11 +67,14 @@ function storeToForm(store: Store): StoreEditForm {
     }),
   ) as Record<Day, DayHoursForm>;
 
+  const { lat, lng } = parseLocation(store.location);
+
   return {
     name: store.name ?? "",
     email: store.email ?? "",
     contactNumber: store.contactNumber ?? "",
-    location: store.location ?? "",
+    lat,
+    lng,
     address: store.address ?? "",
     city: store.city ?? "",
     imageUrl: store.imageUrl ?? "",
@@ -86,6 +93,10 @@ export default function StoreDetailPage() {
   const isAdmin = currentStaff?.role === "admin";
   const myStoreIds = currentStaff?.storeIds ?? [];
   const canAccess = isAdmin || myStoreIds.includes(storeId);
+
+  const { log } = useActivityLog();
+  // Hours and holiday hours are reachable by both roles; edit/delete are admin-only.
+  const actor = isAdmin ? "Admin" : "Store manager";
 
   const stores = useStoreStore((s) => s.stores);
 
@@ -127,6 +138,13 @@ export default function StoreDetailPage() {
     setLoading(true);
     try {
       await StoreService.updateStore(store.docId, { openingHours });
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Edit Opening Hours",
+        notes: `${actor} edited Opening hours for ${store.name ?? ""}`,
+        page: LOG_PAGE.STORES,
+      });
       toast.success("Opening hours updated.");
       closeDialog();
     } catch (err) {
@@ -194,10 +212,21 @@ export default function StoreDetailPage() {
     }
     updatedMap[holidayForm.date] = entry;
 
+    // Captured before closeDialog() resets them.
+    const isEditing = editingDate !== null;
+    const holidayDate = holidayForm.date;
+
     setLoading(true);
     try {
       await StoreService.updateStore(store.docId, { holidayHours: updatedMap });
-      toast.success(editingDate ? "Holiday updated." : "Holiday added.");
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: isEditing ? "Edit Holiday Hours" : "Add Holiday Hours",
+        notes: `${actor} ${isEditing ? "edited" : "added"} special operating hours for ${store.name ?? ""} on ${holidayDate}`,
+        page: LOG_PAGE.STORES,
+      });
+      toast.success(isEditing ? "Holiday updated." : "Holiday added.");
       closeDialog();
     } catch (err) {
       console.error(err);
@@ -212,6 +241,13 @@ export default function StoreDetailPage() {
     setLoading(true);
     try {
       await StoreService.deleteStore(store.docId);
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Delete Store",
+        notes: `Admin deleted a store ${store.name ?? ""}`,
+        page: LOG_PAGE.STORES,
+      });
       toast.success("Store deleted.");
       router.push("/dashboard/stores");
     } catch (err) {
@@ -227,9 +263,19 @@ export default function StoreDetailPage() {
     const updatedMap: Record<string, HolidayHours> = { ...store.holidayHours };
     delete updatedMap[editingDate];
 
+    // Captured before closeDialog() resets it.
+    const holidayDate = editingDate;
+
     setLoading(true);
     try {
       await StoreService.updateStore(store.docId, { holidayHours: updatedMap });
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Delete Holiday Hours",
+        notes: `${actor} deleted special operating hours for ${store.name ?? ""} on ${holidayDate}`,
+        page: LOG_PAGE.STORES,
+      });
       toast.success("Holiday removed.");
       closeDialog();
     } catch (err) {
@@ -265,6 +311,14 @@ export default function StoreDetailPage() {
       return;
     }
 
+    const latInvalid = !isValidCoordinate(form.lat, 90);
+    const lngInvalid = !isValidCoordinate(form.lng, 180);
+    if (latInvalid || lngInvalid) {
+      setErrors({ ...newErrors, lat: latInvalid, lng: lngInvalid });
+      toast.error("Please enter a valid latitude and longitude.");
+      return;
+    }
+
     const openingHours: Record<string, DayHours> = Object.fromEntries(
       DAYS.map((day) => {
         const { isOpen, open, close } = form.openingHours[day];
@@ -278,7 +332,7 @@ export default function StoreDetailPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         contactNumber: form.contactNumber.trim(),
-        location: form.location.trim(),
+        location: formatLocation(form.lat, form.lng),
         address: form.address.trim(),
         city: form.city.trim() || null,
         ...(form.imageUrl.trim() ? { imageUrl: form.imageUrl.trim() } : { imageUrl: "" }),
@@ -286,6 +340,13 @@ export default function StoreDetailPage() {
         invoiceText: form.invoiceText.trim(),
         printerId: form.printerId.trim(),
         openingHours,
+      });
+      log({
+        category: LOG_CATEGORY.STORES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Edit Store",
+        notes: `Admin edited store ${form.name.trim()} contact/address/GST info`,
+        page: LOG_PAGE.STORES,
       });
       toast.success("Store updated successfully.");
       closeDialog();
@@ -552,14 +613,28 @@ export default function StoreDetailPage() {
                   {errors.contactNumber && <p className="mt-1 text-xs text-error">Required.</p>}
                 </div>
 
-                <div className="col-span-2">
-                  <label className="mb-1.5 block text-xs text-light-grey">Location *</label>
-                  <input
-                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.location ? "border-error" : "border-border"}`}
-                    value={form.location}
-                    onChange={(e) => setField("location", e.target.value)}
-                  />
-                  {errors.location && <p className="mt-1 text-xs text-error">Required.</p>}
+                <div className="col-span-2 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs text-light-grey">Latitude *</label>
+                    <input
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.lat ? "border-error" : "border-border"}`}
+                      placeholder="e.g. 31.00"
+                      value={form.lat}
+                      onChange={(e) => setField("lat", e.target.value)}
+                    />
+                    {errors.lat && <p className="mt-1 text-xs text-error">Enter a number between -90 and 90.</p>}
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs text-light-grey">Longitude *</label>
+                    <input
+                      className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.lng ? "border-error" : "border-border"}`}
+                      placeholder="e.g. 33.00"
+                      value={form.lng}
+                      onChange={(e) => setField("lng", e.target.value)}
+                    />
+                    {errors.lng && <p className="mt-1 text-xs text-error">Enter a number between -180 and 180.</p>}
+                  </div>
                 </div>
 
                 <div className="col-span-2">
@@ -623,12 +698,14 @@ export default function StoreDetailPage() {
                         key={day}
                         className={`flex items-center gap-3 px-3 py-2.5 ${i !== DAYS.length - 1 ? "border-b border-border" : ""} ${!hours.isOpen ? "opacity-50" : ""}`}
                       >
-                        <label className="flex w-28 shrink-0 cursor-pointer items-center gap-2 text-sm font-medium capitalize text-black">
-                          <input
-                            type="checkbox"
+                        <label
+                          htmlFor={`edit-day-${day}`}
+                          className="flex w-28 shrink-0 cursor-pointer items-center gap-2 text-sm font-medium capitalize text-black"
+                        >
+                          <Checkbox
+                            id={`edit-day-${day}`}
                             checked={hours.isOpen}
-                            onChange={(e) => setDayHours(day, { isOpen: e.target.checked })}
-                            className="accent-primary"
+                            onCheckedChange={(c) => setDayHours(day, { isOpen: c === true })}
                           />
                           {day}
                         </label>
@@ -684,12 +761,14 @@ export default function StoreDetailPage() {
                       key={day}
                       className={`flex items-center gap-3 px-3 py-2.5 ${i !== DAYS.length - 1 ? "border-b border-border" : ""} ${!hours.isOpen ? "opacity-50" : ""}`}
                     >
-                      <label className="flex w-28 shrink-0 cursor-pointer items-center gap-2 text-sm font-medium capitalize text-black">
-                        <input
-                          type="checkbox"
+                      <label
+                        htmlFor={`hours-day-${day}`}
+                        className="flex w-28 shrink-0 cursor-pointer items-center gap-2 text-sm font-medium capitalize text-black"
+                      >
+                        <Checkbox
+                          id={`hours-day-${day}`}
                           checked={hours.isOpen}
-                          onChange={(e) => setDayHours(day, { isOpen: e.target.checked })}
-                          className="accent-primary"
+                          onCheckedChange={(c) => setDayHours(day, { isOpen: c === true })}
                         />
                         {day}
                       </label>
@@ -760,12 +839,11 @@ export default function StoreDetailPage() {
                     onChange={(e) => setHolidayForm((f) => ({ ...f, description: e.target.value }))}
                   />
                 </div>
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-black">
-                  <input
-                    type="checkbox"
+                <label htmlFor="holiday-closed-all-day" className="flex cursor-pointer items-center gap-2 text-sm text-black">
+                  <Checkbox
+                    id="holiday-closed-all-day"
                     checked={!holidayForm.isOpen}
-                    onChange={(e) => setHolidayForm((f) => ({ ...f, isOpen: !e.target.checked }))}
-                    className="accent-primary"
+                    onCheckedChange={(c) => setHolidayForm((f) => ({ ...f, isOpen: c !== true }))}
                   />
                   Closed all day
                 </label>

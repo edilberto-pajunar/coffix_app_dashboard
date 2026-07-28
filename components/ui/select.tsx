@@ -66,7 +66,7 @@ function SelectItem({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex cursor-pointer select-none items-center gap-2 rounded-md py-1.5 pr-2 pl-7 text-sm text-black outline-none data-[highlighted]:bg-background data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "relative flex cursor-pointer select-none items-center gap-2 rounded-md py-1.5 pr-2 pl-7 text-sm text-black outline-none transition-colors data-[highlighted]:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className
       )}
       {...props}

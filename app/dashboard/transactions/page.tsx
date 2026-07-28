@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTransactionStore } from "./store/useTransactionStore";
 import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
@@ -8,6 +8,7 @@ import { Transaction, PaymentMethod } from "./interface/transaction";
 import { formatDateTime } from "@/app/utils/formatting";
 import { escapeCSV, tsToISO, triggerCSVDownload } from "@/app/utils/csvUtils";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/app/lib/AuthContext";
 import { toast } from "sonner";
 import { TransactionService } from "./service/TransactionService";
@@ -51,7 +52,6 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [invoicing, setInvoicing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const [filterStatus, setFilterStatus] = useState<Set<string>>(new Set());
   const [filterCreatedAt, setFilterCreatedAt] = useState<DateRange>({ from: "", to: "" });
@@ -214,11 +214,10 @@ export default function TransactionsPage() {
       filterStatus, filterCreatedAt, filterAmount, filterTotalAmount,
       filterRecipientEmail, filterRecipientFullName]);
 
-  useEffect(() => {
-    if (!selectAllRef.current) return;
-    const checkedCount = displayed.filter((tx) => tx.docId && selected.has(tx.docId)).length;
-    selectAllRef.current.indeterminate = checkedCount > 0 && checkedCount < displayed.length;
-  });
+  const selectedCount = displayed.filter((tx) => tx.docId && selected.has(tx.docId)).length;
+  const allDisplayedSelected =
+    displayed.length > 0 && displayed.every((tx) => !tx.docId || selected.has(tx.docId));
+  const someDisplayedSelected = selectedCount > 0 && !allDisplayedSelected;
 
   const sortIndicator = (key: SortKey) =>
     sortKey === key ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>;
@@ -292,12 +291,9 @@ export default function TransactionsPage() {
           <thead>
             <tr className="border-b border-border bg-background">
               <th className="w-10 px-4 py-3">
-                <input
-                  ref={selectAllRef}
-                  type="checkbox"
-                  checked={displayed.length > 0 && displayed.every((tx) => !tx.docId || selected.has(tx.docId))}
-                  onChange={toggleSelectAll}
-                  className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                <Checkbox
+                  checked={someDisplayedSelected ? "indeterminate" : allDisplayedSelected}
+                  onCheckedChange={toggleSelectAll}
                 />
               </th>
               <th
@@ -336,11 +332,9 @@ export default function TransactionsPage() {
                   className="cursor-pointer transition-colors hover:bg-background"
                 >
                   <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={!!tx.docId && selected.has(tx.docId)}
-                      onChange={() => tx.docId && toggleRow(tx.docId)}
-                      className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                      onCheckedChange={() => tx.docId && toggleRow(tx.docId)}
                     />
                   </td>
                   <td className="px-5 py-3 font-mono text-black">

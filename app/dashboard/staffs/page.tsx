@@ -27,7 +27,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StaffsFilterBar } from "./components/StaffsFilterBar";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
 // ─── Form types ───────────────────────────────────────────────────────────────
 
@@ -219,13 +222,13 @@ function StaffDialog({
                   stores.map((store) => (
                     <label
                       key={store.docId}
+                      htmlFor={`staff-store-${store.docId}`}
                       className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-background"
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
+                        id={`staff-store-${store.docId}`}
                         checked={form.storeIds.includes(store.docId)}
-                        onChange={() => onToggleStore(store.docId)}
-                        className="accent-primary"
+                        onCheckedChange={() => onToggleStore(store.docId)}
                       />
                       <span className="text-sm text-black">
                         {store.name ?? store.docId}
@@ -244,12 +247,11 @@ function StaffDialog({
 
           {/* Disabled — only in edit mode */}
           {isEdit && (
-            <label className="flex cursor-pointer items-center gap-3">
-              <input
-                type="checkbox"
+            <label htmlFor="staff-disabled" className="flex cursor-pointer items-center gap-3">
+              <Checkbox
+                id="staff-disabled"
                 checked={form.disabled}
-                onChange={(e) => onChangeDisabled(e.target.checked)}
-                className="accent-primary"
+                onCheckedChange={(c) => onChangeDisabled(c === true)}
               />
               <span className="text-sm text-black">Disabled</span>
             </label>
@@ -440,6 +442,13 @@ export default function StaffsPage() {
         await StaffService.updateStaff(row.docId, update);
         count++;
       }
+      log({
+        category: LOG_CATEGORY.IMPORT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Import Staff",
+        notes: `Admin updated ${count} staff member${count !== 1 ? "s" : ""} via CSV`,
+        page: LOG_PAGE.USERS,
+      });
       toast.success(`Updated ${count} staff member(s).`);
       setImportPreview(null);
     } catch {
@@ -454,6 +463,7 @@ export default function StaffsPage() {
   const [createForm, setCreateForm] = useState<StaffForm>(emptyForm);
   const [createErrors, setCreateErrors] = useState<StaffFormErrors>({});
   const [createLoading, setCreateLoading] = useState(false);
+  const { log } = useActivityLog();
 
   // Edit dialog state
   const [editTarget, setEditTarget] = useState<Staff | null>(null);
@@ -492,6 +502,13 @@ export default function StaffsPage() {
           ? stores.map((s) => s.docId)
           : createForm.storeIds,
         disabled: false,
+      });
+      log({
+        category: LOG_CATEGORY.USERS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Create Staff User",
+        notes: `Admin created a staff ${createForm.email.trim()} (role ${createForm.role})`,
+        page: LOG_PAGE.USERS,
       });
       toast.success("Staff member created.");
       closeCreate();
@@ -541,6 +558,13 @@ export default function StaffsPage() {
         storeIds: editForm.storeIds,
         disabled: editForm.disabled,
       });
+      log({
+        category: LOG_CATEGORY.USERS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Edit Staff User",
+        notes: `Admin edited a staff ${editForm.email.trim()} (role/store assignment)`,
+        page: LOG_PAGE.USERS,
+      });
       toast.success("User updated.");
       closeEdit();
     } catch (err) {
@@ -556,6 +580,13 @@ export default function StaffsPage() {
     if (!window.confirm(`Delete ${staff.email}? This cannot be undone.`)) return;
     try {
       await StaffService.deleteStaff(staff.docId);
+      log({
+        category: LOG_CATEGORY.USERS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Delete Staff User",
+        notes: `Admin deleted a staff ${staff.email}`,
+        page: LOG_PAGE.USERS,
+      });
       toast.success("User deleted.");
     } catch (err) {
       console.error(err);

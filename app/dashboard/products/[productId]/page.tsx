@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "../store/useDashboardStore";
@@ -10,8 +10,11 @@ import { Product } from "../interface/product";
 import { ProductService } from "../service/ProductService";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploadField } from "@/components/components/ImageUploadField";
+import { useActivityLog } from "../../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../../logs/constants/logConstants";
 type DialogMode = "edit-product" | "delete-product" | "add-modifier" | "remove-modifier-group" | null;
 
 function MultiSelect({
@@ -27,6 +30,7 @@ function MultiSelect({
   onChange: (v: string[]) => void;
   showSelectAll?: boolean;
 }) {
+  const fieldId = useId();
   function toggle(value: string) {
     onChange(
       selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value],
@@ -50,8 +54,8 @@ function MultiSelect({
           <p className="px-1 py-1 text-xs text-black">No options available.</p>
         ) : (
           options.map((opt) => (
-            <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black">
-              <input type="checkbox" checked={selected.includes(opt.value)} onChange={() => toggle(opt.value)} className="accent-primary" />
+            <label key={opt.value} htmlFor={`${fieldId}-${opt.value}`} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black">
+              <Checkbox id={`${fieldId}-${opt.value}`} checked={selected.includes(opt.value)} onCheckedChange={() => toggle(opt.value)} />
               {opt.label}
             </label>
           ))
@@ -68,6 +72,10 @@ export default function ProductDetailPage() {
 
     const { currentStaff } = useAuth();
     const isAdmin = currentStaff?.role === "admin";
+
+    const { log } = useActivityLog();
+    // Availability toggles are reachable by both roles; the rest are admin-only.
+    const actor = isAdmin ? "Admin" : "Store manager";
 
     const products = useDashboardStore((s) => s.products);
     const modifierGroups = useDashboardStore((s) => s.modifierGroups);
@@ -118,6 +126,13 @@ export default function ProductDetailPage() {
                 ? disabledStores.filter((id) => !allStoreIds.includes(id))
                 : [...new Set([...disabledStores, ...allStoreIds])];
             await ProductService.updateProduct(product.docId, { disabledStores: updated });
+            log({
+                category: LOG_CATEGORY.PRODUCT,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Toggle Product Availability",
+                notes: `${actor} ${isAllDisabled ? "enabled" : "disabled"} ${product.name ?? ""} for all stores`,
+                page: LOG_PAGE.PRODUCTS,
+            });
             toast.success(
                 isAllDisabled
                     ? "Product enabled for all stores."
@@ -140,6 +155,14 @@ export default function ProductDetailPage() {
                 ? disabledStores.filter((id) => id !== storeId)
                 : [...disabledStores, storeId];
             await ProductService.updateProduct(product.docId, { disabledStores: updated });
+            const storeName = stores.find((s) => s.docId === storeId)?.name ?? storeId;
+            log({
+                category: LOG_CATEGORY.PRODUCT,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Toggle Store Availability",
+                notes: `${actor} ${isCurrentlyDisabled ? "enabled" : "disabled"} ${product.name ?? ""} for store ${storeName}`,
+                page: LOG_PAGE.PRODUCTS,
+            });
             toast.success(
                 isCurrentlyDisabled
                     ? "Product re-enabled for this store."
@@ -174,30 +197,73 @@ export default function ProductDetailPage() {
         setLoading(true);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { docId: _, ...rest } = productForm as Product;
-        await ProductService.updateProduct(product.docId, rest);
-        setLoading(false);
-        setDialog(null);
+        try {
+            await ProductService.updateProduct(product.docId, rest);
+            log({
+                category: LOG_CATEGORY.PRODUCT,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Edit Product",
+                notes: `Admin edited ${product.name ?? ""} details`,
+                page: LOG_PAGE.PRODUCTS,
+            });
+            toast.success("Product updated successfully.");
+            setDialog(null);
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to update product. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     }
 
     async function handleDeleteProduct() {
         if (!product?.docId) return;
         setLoading(true);
-        await ProductService.deleteProduct(product.docId);
-        setLoading(false);
-        router.push("/dashboard/products");
+        try {
+            await ProductService.deleteProduct(product.docId);
+            log({
+                category: LOG_CATEGORY.PRODUCT,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Delete Product",
+                notes: `Admin deleted product ${product.name ?? ""}`,
+                page: LOG_PAGE.PRODUCTS,
+            });
+            setDialog(null);
+            router.push("/dashboard/products");
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to delete product. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     }
 
     async function handleAddModifierGroup() {
         if (!selectedGroupId || !product?.docId) return;
         setLoading(true);
-        const current = product.modifierGroupIds ?? [];
-        if (!current.includes(selectedGroupId)) {
-            await ProductService.updateProduct(product.docId, {
-                modifierGroupIds: [...current, selectedGroupId],
-            });
+        try {
+            const current = product.modifierGroupIds ?? [];
+            if (!current.includes(selectedGroupId)) {
+                await ProductService.updateProduct(product.docId, {
+                    modifierGroupIds: [...current, selectedGroupId],
+                });
+                const groupName =
+                    modifierGroups.find((g) => g.docId === selectedGroupId)?.name ?? selectedGroupId;
+                log({
+                    category: LOG_CATEGORY.PRODUCT,
+                    severityLevel: LOG_SEVERITY.HIGH,
+                    action: "Add Modifier Group",
+                    notes: `Admin added modifier group ${groupName} on ${product.name ?? ""}`,
+                    page: LOG_PAGE.PRODUCTS,
+                });
+            }
+            setDialog(null);
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to add modifier group. Please try again.");
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-        setDialog(null);
     }
 
     function openRemoveModifierGroup(groupDocId: string) {
@@ -208,11 +274,26 @@ export default function ProductDetailPage() {
     async function handleRemoveModifierGroup() {
         if (!activeGroupId || !product?.docId) return;
         setLoading(true);
-        await ProductService.updateProduct(product.docId, {
-            modifierGroupIds: (product.modifierGroupIds ?? []).filter((id) => id !== activeGroupId),
-        });
-        setLoading(false);
-        setDialog(null);
+        try {
+            await ProductService.updateProduct(product.docId, {
+                modifierGroupIds: (product.modifierGroupIds ?? []).filter((id) => id !== activeGroupId),
+            });
+            const groupName =
+                modifierGroups.find((g) => g.docId === activeGroupId)?.name ?? activeGroupId;
+            log({
+                category: LOG_CATEGORY.PRODUCT,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Remove Modifier Group",
+                notes: `Admin removed modifier group ${groupName} from ${product.name ?? ""}`,
+                page: LOG_PAGE.PRODUCTS,
+            });
+            setDialog(null);
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to remove modifier group. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     }
 
     async function handleDrop(overIndex: number) {

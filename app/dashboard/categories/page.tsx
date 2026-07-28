@@ -20,12 +20,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CategoriesFilterBar } from "./components/CategoriesFilterBar";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
 type ImportError = { row: number; field: string; reason: string };
 type ImportPreview = { validRows: Record<string, string>[]; errors: ImportError[] } | null;
 
 export default function CategoriesPage() {
   const categories = useDashboardStore((s) => s.categories);
+  const { log } = useActivityLog();
 
   const [search, setSearch] = useState("");
 
@@ -93,10 +96,23 @@ export default function CategoriesPage() {
     try {
       const data = { name: categoryForm.name.trim() };
       if (categoryDialog === "create") {
-        await ProductService.createCategory(data);
+        await ProductService.createCategory({
+          name: categoryForm.name.trim(),
+          createdAt: new Date(),
+        });
       } else if (categoryDialog === "edit" && activeCategoryId) {
         await ProductService.updateCategory(activeCategoryId, data);
       }
+      log({
+        category: LOG_CATEGORY.CATEGORIES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: categoryDialog === "create" ? "Create Category" : "Edit Category",
+        notes:
+          categoryDialog === "create"
+            ? `Admin added new category ${data.name}`
+            : `Admin edited category ${data.name}`,
+        page: LOG_PAGE.CATEGORIES,
+      });
       toast.success(categoryDialog === "create" ? "Category created." : "Category updated.");
       setCategoryDialog(null);
       setCategoryForm({ name: "" });
@@ -112,8 +128,18 @@ export default function CategoriesPage() {
   async function handleDeleteCategory() {
     if (!activeCategoryId) return;
     setCategoryLoading(true);
+    // Resolved before the delete — the row leaves the store once it's gone.
+    const categoryName =
+      categories.find((c) => c.docId === activeCategoryId)?.name ?? activeCategoryId;
     try {
       await ProductService.deleteCategory(activeCategoryId);
+      log({
+        category: LOG_CATEGORY.CATEGORIES,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Delete Category",
+        notes: `Admin deleted ${categoryName} category`,
+        page: LOG_PAGE.CATEGORIES,
+      });
       toast.success("Category deleted.");
       setCategoryDialog(null);
       setActiveCategoryId(null);
@@ -230,6 +256,13 @@ export default function CategoriesPage() {
         }
         count++;
       }
+      log({
+        category: LOG_CATEGORY.IMPORT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Import Categories",
+        notes: `Admin imported ${count} categor${count !== 1 ? "ies" : "y"} via CSV`,
+        page: LOG_PAGE.CATEGORIES,
+      });
       toast.success(`Imported ${count} categor${count !== 1 ? "ies" : "y"}.`);
       setImportPreview(null);
     } catch {

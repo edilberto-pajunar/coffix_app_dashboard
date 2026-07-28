@@ -11,8 +11,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { LogService } from "../service/LogService";
 import { LogSettings } from "../interface/logSettings";
+import { useActivityLog } from "../hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../constants/logConstants";
 
 const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -29,6 +32,7 @@ export function LogSettingsDialog({
   const [retentionDays, setRetentionDays] = useState("");
   const [levels, setLevels] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
+  const { log } = useActivityLog();
 
   useEffect(() => {
     setEnabled(settings?.enabled ?? false);
@@ -66,6 +70,13 @@ export function LogSettingsDialog({
       if (trimmed !== "") payload.retentionDays = Number(trimmed);
 
       await LogService.updateLogSettings(payload);
+      log({
+        category: LOG_CATEGORY.LOGS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Save Log Settings",
+        notes: `Admin changed log auto-deletion/retention settings (enabled: ${enabled}, retention: ${trimmed || "unset"} days)`,
+        page: LOG_PAGE.LOGS,
+      });
       toast.success("Log deletion settings saved.");
       onOpenChange(false);
     } catch (err) {
@@ -140,13 +151,13 @@ export function LogSettingsDialog({
               {LEVELS.map((level) => (
                 <label
                   key={level}
+                  htmlFor={`log-level-${level}`}
                   className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-black"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
+                    id={`log-level-${level}`}
                     checked={levels.has(level)}
-                    onChange={() => toggleLevel(level)}
-                    className="h-4 w-4 cursor-pointer accent-primary"
+                    onCheckedChange={() => toggleLevel(level)}
                   />
                   Level {level}
                 </label>

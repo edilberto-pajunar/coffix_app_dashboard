@@ -10,6 +10,8 @@ import { UserService } from "@/app/dashboard/users/service/UserService";
 import { AppUser } from "../interface/user";
 import { formatDate, formatDateTime } from "@/app/utils/formatting"
 import { Switch } from "@/components/ui/switch";
+import { useActivityLog } from "../../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../../logs/constants/logConstants";
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
 function formatBool(value: boolean | undefined): string {
@@ -128,6 +130,7 @@ export default function UserDetailPage() {
   const [form, setForm] = useState<UserEditForm | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof UserEditForm, boolean>>>({});
   const [loading, setLoading] = useState(false);
+  const { log } = useActivityLog();
 
   if (!user) {
     return (
@@ -186,6 +189,11 @@ export default function UserDetailPage() {
     const creditExpiryDate = form.creditExpiry ? new Date(form.creditExpiry + "T00:00:00") : undefined;
     const creditParsed = parseFloat(form.creditAvailable);
 
+    // Captured before the await — the store refreshes from the snapshot listener.
+    const wasDisabled = user.disabled ?? false;
+    const nowDisabled = form.disabled ?? false;
+    const customerLabel = user.email ?? user.docId;
+
     setLoading(true);
     try {
       await UserService.updateUser(user.docId, {
@@ -215,6 +223,26 @@ export default function UserDetailPage() {
         allowCoffeeForHome: form.allowCoffeeForHome,
         allowNotifications: form.allowNotifications,
       });
+      log({
+        category: LOG_CATEGORY.CUSTOMERS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Edit Customer",
+        notes: `Admin edited customer ${customerLabel} info, credit, or preferences`,
+        page: LOG_PAGE.CUSTOMERS,
+        customerId: user.docId,
+      });
+      // The edit dialog saves `disabled` alongside everything else, so a
+      // toggle is only detectable by comparing against the pre-save value.
+      if (wasDisabled !== nowDisabled) {
+        log({
+          category: LOG_CATEGORY.CUSTOMERS,
+          severityLevel: LOG_SEVERITY.HIGH,
+          action: nowDisabled ? "Disable Customer" : "Enable Customer",
+          notes: `Admin ${nowDisabled ? "disabled" : "enabled"} a customer account ${customerLabel}`,
+          page: LOG_PAGE.CUSTOMERS,
+          customerId: user.docId,
+        });
+      }
       toast.success("User updated successfully.");
       closeDialog();
     } catch (err) {

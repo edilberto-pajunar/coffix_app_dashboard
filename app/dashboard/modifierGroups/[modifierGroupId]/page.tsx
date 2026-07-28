@@ -8,6 +8,9 @@ import { Modifier } from "../../products/interface/modifier";
 import { ProductService } from "../../products/service/ProductService";
 import { formatCurrencyInput } from "@/app/utils/formatting";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useActivityLog } from "../../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../../logs/constants/logConstants";
 
 type DialogMode = "edit-group" | "delete-group" | "add-modifier" | "edit-modifier" | "delete-modifier" | null;
 
@@ -27,6 +30,7 @@ export default function ModifierGroupDetailPage() {
   const modifierGroups = useDashboardStore((s) => s.modifierGroups);
   const modifiers = useDashboardStore((s) => s.modifiers);
   const products = useDashboardStore((s) => s.products);
+  const { log } = useActivityLog();
 
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [groupForm, setGroupForm] = useState({ name: "", required: false });
@@ -108,6 +112,13 @@ export default function ModifierGroupDetailPage() {
         name: groupForm.name.trim(),
         required: groupForm.required,
       });
+      log({
+        category: LOG_CATEGORY.MODIFIER_GROUPS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Edit Modifier Group",
+        notes: `Admin edited modifier group ${groupForm.name.trim()}`,
+        page: LOG_PAGE.MODIFIER_GROUPS,
+      });
       toast.success("Modifier group updated.");
       setDialog(null);
     } catch (err) {
@@ -121,12 +132,22 @@ export default function ModifierGroupDetailPage() {
   async function handleDeleteGroup() {
     if (!group?.docId) return;
     setLoading(true);
+    // Captured before the cascade removes the group and its modifiers.
+    const groupName = group.name ?? group.docId;
+    const modifierCount = (group.modifierIds ?? []).length;
     try {
       await ProductService.deleteModifierGroupCascade(
         group.docId,
         group.modifierIds ?? [],
         productsUsingGroup.map((p) => p.docId).filter((id): id is string => !!id),
       );
+      log({
+        category: LOG_CATEGORY.MODIFIER_GROUPS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Delete Modifier Group",
+        notes: `Admin deleted modifier group ${groupName} and its ${modifierCount} modifier${modifierCount !== 1 ? "s" : ""}`,
+        page: LOG_PAGE.MODIFIER_GROUPS,
+      });
       toast.success("Modifier group and its modifiers deleted.");
       router.push("/dashboard/modifierGroups");
     } catch (err) {
@@ -154,8 +175,17 @@ export default function ModifierGroupDetailPage() {
           cost: parseFloat(modifierForm.cost) || 0,
           isDefault: modifierForm.isDefault,
           groupId: group.docId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
         await ProductService.addModifierToGroup(group.docId, ref.id);
+        log({
+          category: LOG_CATEGORY.MODIFIER_GROUPS,
+          severityLevel: LOG_SEVERITY.HIGH,
+          action: "Add Modifier",
+          notes: `Admin added modifier ${modifierForm.label} within group ${group.name ?? group.docId}`,
+          page: LOG_PAGE.MODIFIER_GROUPS,
+        });
         toast.success("Modifier added.");
       } else if (activeModifierId) {
         if (modifierForm.isDefault) {
@@ -173,6 +203,13 @@ export default function ModifierGroupDetailPage() {
           cost: parseFloat(modifierForm.cost) || 0,
           isDefault: modifierForm.isDefault,
         });
+        log({
+          category: LOG_CATEGORY.MODIFIER_GROUPS,
+          severityLevel: LOG_SEVERITY.HIGH,
+          action: "Edit Modifier",
+          notes: `Admin edited modifier ${modifierForm.label} within group ${group.name ?? group.docId}`,
+          page: LOG_PAGE.MODIFIER_GROUPS,
+        });
         toast.success("Modifier updated.");
       }
       setDialog(null);
@@ -187,9 +224,19 @@ export default function ModifierGroupDetailPage() {
   async function handleDeleteModifier() {
     if (!activeModifierId || !group?.docId) return;
     setLoading(true);
+    // Resolved before the delete — the modifier leaves the store once it's gone.
+    const modifierLabel =
+      orderedModifiers.find((m) => m.docId === activeModifierId)?.label ?? activeModifierId;
     try {
       await ProductService.deleteModifier(activeModifierId);
       await ProductService.removeModifierFromGroup(group.docId, activeModifierId);
+      log({
+        category: LOG_CATEGORY.MODIFIER_GROUPS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Delete Modifier",
+        notes: `Admin deleted modifier ${modifierLabel} from group ${group.name ?? group.docId}`,
+        page: LOG_PAGE.MODIFIER_GROUPS,
+      });
       toast.success("Modifier deleted.");
       setDialog(null);
     } catch (err) {
@@ -338,12 +385,11 @@ export default function ModifierGroupDetailPage() {
                     />
                     {groupErrors.name && <p className="mt-1 text-xs text-error">Name is required.</p>}
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-black">
-                    <input
-                      type="checkbox"
+                  <label htmlFor="group-required" className="flex cursor-pointer items-center gap-2 text-sm text-black">
+                    <Checkbox
+                      id="group-required"
                       checked={groupForm.required}
-                      onChange={(e) => setGroupForm((f) => ({ ...f, required: e.target.checked }))}
-                      className="accent-primary"
+                      onCheckedChange={(c) => setGroupForm((f) => ({ ...f, required: c === true }))}
                     />
                     Required
                   </label>
@@ -429,12 +475,11 @@ export default function ModifierGroupDetailPage() {
                       />
                     </div>
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-black">
-                    <input
-                      type="checkbox"
+                  <label htmlFor="modifier-is-default" className="flex cursor-pointer items-center gap-2 text-sm text-black">
+                    <Checkbox
+                      id="modifier-is-default"
                       checked={modifierForm.isDefault}
-                      onChange={(e) => setModifierForm((f) => ({ ...f, isDefault: e.target.checked }))}
-                      className="accent-primary"
+                      onCheckedChange={(c) => setModifierForm((f) => ({ ...f, isDefault: c === true }))}
                     />
                     Default modifier
                   </label>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "./store/useDashboardStore";
@@ -29,9 +29,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ProductsFilterBar } from "./components/ProductsFilterBar";
 import { ImageUploadField } from "@/components/components/ImageUploadField";
 import { useAuth } from "@/app/lib/AuthContext";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
 type NewProductForm = {
   name: string;
@@ -68,6 +72,8 @@ function MultiSelect({
   error?: boolean;
   showSelectAll?: boolean;
 }) {
+  const fieldId = useId();
+
   function toggle(value: string) {
     onChange(
       selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value],
@@ -104,12 +110,15 @@ function MultiSelect({
           <p className="px-1 py-1 text-xs text-black">No options available.</p>
         ) : (
           options.map((opt) => (
-            <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black ">
-              <input
-                type="checkbox"
+            <label
+              key={opt.value}
+              htmlFor={`${fieldId}-${opt.value}`}
+              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black "
+            >
+              <Checkbox
+                id={`${fieldId}-${opt.value}`}
                 checked={selected.includes(opt.value)}
-                onChange={() => toggle(opt.value)}
-                className="accent-primary"
+                onCheckedChange={() => toggle(opt.value)}
               />
               {opt.label}
             </label>
@@ -179,6 +188,8 @@ export default function ProductsPage() {
 
   async function handleBulkStoreUpdate() {
     setBulkLoading(true);
+    // Captured before the selection is cleared below, so the log note is accurate.
+    const affectedCount = selectedIds.size;
     try {
       await Promise.all(
         Array.from(selectedIds).map((id) => {
@@ -202,6 +213,13 @@ export default function ProductsPage() {
           });
         }),
       );
+      log({
+        category: LOG_CATEGORY.PRODUCT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Bulk Update Stores",
+        notes: `Admin updated store availability for ${affectedCount} product${affectedCount !== 1 ? "s" : ""}`,
+        page: LOG_PAGE.PRODUCTS,
+      });
       toast.success("Stores updated for selected products.");
       setShowBulkStores(false);
       setSelectedIds(new Set());
@@ -324,6 +342,7 @@ export default function ProductsPage() {
 
   const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.docId ?? ""));
   const someVisibleSelected = filtered.some((p) => selectedIds.has(p.docId ?? ""));
+  const { log } = useActivityLog();
 
   function toggleSelectAll() {
     if (allVisibleSelected) {
@@ -356,7 +375,17 @@ export default function ProductsPage() {
       await ProductService.createProduct({
         ...rest,
         name: `Copy of ${product.name ?? ""}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
+      log({
+        category: LOG_CATEGORY.PRODUCT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Duplicate Product",
+        notes: `Admin duplicated product ${product.name ?? ""}`,
+        page: LOG_PAGE.PRODUCTS,
+      });
+
       toast.success("Product duplicated successfully.");
     } catch {
       toast.error("Failed to duplicate product. Please try again.");
@@ -365,6 +394,8 @@ export default function ProductsPage() {
 
   async function handleBulkDisable(disabled: boolean) {
     setBulkLoading(true);
+    // Captured before the selection is cleared below, so the log note is accurate.
+    const affectedCount = selectedIds.size;
     try {
       await Promise.all(
         Array.from(selectedIds).map((id) => {
@@ -375,6 +406,13 @@ export default function ProductsPage() {
           return ProductService.updateProduct(id, { disabledStores });
         }),
       );
+      log({
+        category: LOG_CATEGORY.PRODUCT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Bulk Toggle Availability",
+        notes: `Admin bulk ${disabled ? "disabled" : "enabled"} ${affectedCount} product${affectedCount !== 1 ? "s" : ""}`,
+        page: LOG_PAGE.PRODUCTS,
+      });
       toast.success(disabled ? "Selected products disabled." : "Selected products enabled.");
       setSelectedIds(new Set());
     } catch (err) {
@@ -557,6 +595,13 @@ export default function ProductsPage() {
         }
         count++;
       }
+      log({
+        category: LOG_CATEGORY.IMPORT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Import Products",
+        notes: `Admin imported ${count} product${count !== 1 ? "s" : ""} via CSV`,
+        page: LOG_PAGE.PRODUCTS,
+      });
       toast.success(`Imported ${count} product${count !== 1 ? "s" : ""}.`);
       setImportPreview(null);
     } catch {
@@ -595,6 +640,15 @@ export default function ProductsPage() {
         categoryId: form.categoryId,
         modifierGroupIds: form.modifierGroupIds,
         availableToStores: form.availableToStores,
+        disabledStores: [],
+        createdAt: new Date(),
+      });
+      log({
+        category: LOG_CATEGORY.PRODUCT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Create Product",
+        notes: `Admin added ${form.name.trim()} product`,
+        page: LOG_PAGE.PRODUCTS,
       });
       toast.success("Product created successfully.");
       closeCreate();
@@ -691,12 +745,11 @@ export default function ProductsPage() {
             <tr className="border-b border-border bg-background">
               {isDragMode && <th className="w-6 px-2 py-3" />}
               <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  ref={(el) => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected; }}
-                  onChange={toggleSelectAll}
-                  className="accent-primary"
+                <Checkbox
+                  checked={
+                    someVisibleSelected && !allVisibleSelected ? "indeterminate" : allVisibleSelected
+                  }
+                  onCheckedChange={toggleSelectAll}
                 />
               </th>
               <th
@@ -759,11 +812,9 @@ export default function ProductsPage() {
                       </td>
                     )}
                     <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={isSelected}
-                        onChange={() => toggleSelectOne(product.docId ?? "")}
-                        className="accent-primary"
+                        onCheckedChange={() => toggleSelectOne(product.docId ?? "")}
                       />
                     </td>
                     <td className="px-5 py-3">
@@ -799,6 +850,7 @@ export default function ProductsPage() {
                       <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <button
                           title="Duplicate product"
+                          
                           onClick={() => handleCopyProduct(product)}
                           className="opacity-0 group-hover:opacity-100 rounded-lg p-1.5 text-black transition-opacity hover:bg-[#f0f0f0] hover:text-black"
                         >
@@ -879,16 +931,25 @@ export default function ProductsPage() {
 
             <div>
               <label className="mb-1.5 block text-xs text-black">Category *</label>
-              <select
-                className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.categoryId ? "border-error" : "border-border"}`}
+              <Select
                 value={form.categoryId}
-                onChange={(e) => setField("categoryId", e.target.value)}
+                onValueChange={(value) => setField("categoryId", value)}
               >
-                <option value="">— Select category —</option>
-                {categories.map((c) => (
-                  <option key={c.docId} value={c.docId}>{c.name}</option>
-                ))}
-              </select>
+                <SelectTrigger
+                  className={`h-auto w-full rounded-lg border px-3 py-2 focus:border-primary ${errors.categoryId ? "border-error" : "border-border"}`}
+                >
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent className="w-(--radix-select-trigger-width) ">
+                  {categories
+                    .filter((c) => c.docId)
+                    .map((c) => (
+                      <SelectItem  key={c.docId} value={c.docId!}>
+                        {c.name ?? c.docId}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               {errors.categoryId && <p className="mt-1 text-xs text-error">Category is required.</p>}
             </div>
 
@@ -969,12 +1030,15 @@ export default function ProductsPage() {
                 const isIndeterminate = state === null;
                 const isChecked = state === true;
                 return (
-                  <label key={store.docId} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black hover:bg-background">
-                    <input
-                      type="checkbox"
-                      checked={isChecked || isIndeterminate}
-                      ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
-                      onChange={() => {
+                  <label
+                    key={store.docId}
+                    htmlFor={`bulk-store-${store.docId}`}
+                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-black hover:bg-background"
+                  >
+                    <Checkbox
+                      id={`bulk-store-${store.docId}`}
+                      checked={isIndeterminate ? "indeterminate" : isChecked}
+                      onCheckedChange={() => {
                         setBulkStoreChanges((prev) => {
                           const next = new Map(prev);
                           // cycle: indeterminate → checked, checked → unchecked, unchecked → checked
@@ -984,7 +1048,6 @@ export default function ProductsPage() {
                           return next;
                         });
                       }}
-                      className="accent-primary"
                     />
                     <span className="flex-1">{store.name ?? store.docId}</span>
                     {isIndeterminate && (

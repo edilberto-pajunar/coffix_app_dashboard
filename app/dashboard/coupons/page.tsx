@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useCouponStore } from "./store/useCouponStore";
@@ -25,9 +25,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CouponsFilterBar } from "./components/CouponsFilterBar";
 import { AddCouponDialog } from "./components/AddCouponDialog";
 import { formatDateTime } from "@/app/utils/formatting";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,33 +41,6 @@ function firestoreToMs(value: unknown): number {
     return (value as { seconds: number }).seconds * 1000;
   }
   return 0;
-}
-
-function IndeterminateCheckbox({
-  checked,
-  indeterminate,
-  onChange,
-  onClick,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  onChange: () => void;
-  onClick?: (e: React.MouseEvent) => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      onClick={onClick}
-      className="h-4 w-4 cursor-pointer accent-primary"
-    />
-  );
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -120,6 +96,7 @@ export default function CouponsPage() {
   const [bulkExpiry, setBulkExpiry] = useState("");
   const [bulkAmount, setBulkAmount] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
+  const { log } = useActivityLog();
 
   const [showCreate, setShowCreate] = useState(false);
 
@@ -188,6 +165,13 @@ export default function CouponsPage() {
     setBulkLoading(true);
     try {
       await Promise.all(Array.from(selectedIds).map((id) => CouponService.deleteCoupon(id)));
+      log({
+        category: LOG_CATEGORY.COUPON,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Bulk Delete Coupons",
+        notes: `Admin bulk deleted ${selectedIds.size} coupon${selectedIds.size !== 1 ? "s" : ""}`,
+        page: LOG_PAGE.COUPONS,
+      });
       toast.success(`Deleted ${selectedIds.size} coupon(s).`);
       setSelectedIds(new Set());
       setBulkDialog(null);
@@ -208,6 +192,13 @@ export default function CouponsPage() {
           CouponService.updateCoupon(id, { expiryDate: date })
         )
       );
+      log({
+        category: LOG_CATEGORY.COUPON,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Bulk Update Coupon Expiry",
+        notes: `Admin bulk updated expiry to ${bulkExpiry} for ${selectedIds.size} coupon${selectedIds.size !== 1 ? "s" : ""}`,
+        page: LOG_PAGE.COUPONS,
+      });
       toast.success(`Updated expiry for ${selectedIds.size} coupon(s).`);
       setSelectedIds(new Set());
       setBulkDialog(null);
@@ -229,6 +220,13 @@ export default function CouponsPage() {
           CouponService.updateCoupon(id, { amount: amt })
         )
       );
+      log({
+        category: LOG_CATEGORY.COUPON,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Bulk Update Coupon Amount",
+        notes: `Admin bulk updated amount to $${amt.toFixed(2)} for ${selectedIds.size} coupon${selectedIds.size !== 1 ? "s" : ""}`,
+        page: LOG_PAGE.COUPONS,
+      });
       toast.success(`Updated amount for ${selectedIds.size} coupon(s).`);
       setSelectedIds(new Set());
       setBulkDialog(null);
@@ -347,10 +345,17 @@ export default function CouponsPage() {
         if (row.docId && existingIds.includes(row.docId)) {
           await CouponService.updateCoupon(row.docId, data);
         } else {
-          await CouponService.createCoupon({ ...data, createdAt: new Date() } as Omit<Coupon, "docId">);
+          await CouponService.createCoupon(data as Omit<Coupon, "docId">);
         }
         count++;
       }
+      log({
+        category: LOG_CATEGORY.IMPORT,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Import Coupons",
+        notes: `Admin imported ${count} coupon${count !== 1 ? "s" : ""} via CSV`,
+        page: LOG_PAGE.COUPONS,
+      });
       toast.success(`Imported ${count} coupon(s).`);
       setImportPreview(null);
     } catch {
@@ -439,10 +444,9 @@ export default function CouponsPage() {
           <thead>
             <tr className="border-b border-border bg-background">
               <th className="w-10 px-5 py-3">
-                <IndeterminateCheckbox
-                  checked={allSelected}
-                  indeterminate={someSelected}
-                  onChange={toggleSelectAll}
+                <Checkbox
+                  checked={someSelected ? "indeterminate" : allSelected}
+                  onCheckedChange={toggleSelectAll}
                 />
               </th>
               {/* <th className="px-5 py-3 text-left font-medium text-light-grey">Type</th> */}
@@ -488,12 +492,10 @@ export default function CouponsPage() {
                       className="px-5 py-3"
                       onClick={(e) => { e.stopPropagation(); toggleCoupon(coupon.docId!); }}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={isSelected}
-                        onChange={() => toggleCoupon(coupon.docId!)}
+                        onCheckedChange={() => toggleCoupon(coupon.docId!)}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-4 w-4 cursor-pointer accent-primary"
                       />
                     </td>
                     {/* <td className="px-5 py-3 text-black">{coupon.type ?? "—"}</td> */}

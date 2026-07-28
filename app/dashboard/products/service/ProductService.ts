@@ -8,7 +8,6 @@ import {
   DocumentData,
   onSnapshot,
   QuerySnapshot,
-  setDoc,
   Unsubscribe,
   updateDoc,
   writeBatch,
@@ -17,6 +16,8 @@ import { Product } from "../interface/product";
 import { Modifier } from "../interface/modifier";
 import { ModifierGroup } from "../interface/modifierGroup";
 import { Category } from "../interface/category";
+import { createWithSequentialId } from "@/app/utils/generateId";
+import { ID_PREFIXES } from "@/app/utils/constant";
 
 function snapToArray<T>(
   snapshot: QuerySnapshot<DocumentData, DocumentData>,
@@ -67,49 +68,64 @@ export const ProductService = {
       onUpdate(snapToArray<Category>(snap)),
     ),
 
+  // The document ID is a sequential, human-readable code (PRD-000001) rather than a
+  // random Firestore ID, allocated atomically via a counter document.
   createProduct: async (data: Omit<Product, "docId">) => {
-    const ref = doc(collection(db, "products")); // ✅ auto გენ ID
-
-    await setDoc(ref, {
-      ...data,
-      docId: ref.id, // optional: store the ID inside the document
-    });
-
-    return ref;
+    const key = "products";
+    const docId = await createWithSequentialId(
+      key,
+      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { counterKey: key, prefix: ID_PREFIXES.products },
+    );
+    return doc(db, key, docId);
   },
 
   updateProduct: (docId: string, data: Partial<Omit<Product, "docId">>) =>
-    updateDoc(doc(db, "products", docId), data as DocumentData),
+    updateDoc(doc(db, "products", docId), {
+      ...data,
+      updatedAt: new Date(),
+    } as DocumentData),
 
   deleteProduct: (docId: string) => deleteDoc(doc(db, "products", docId)),
 
   createModifier: async (data: Omit<Modifier, "docId">) => {
-    const ref = doc(collection(db, "modifiers"));
-    await setDoc(ref, {
-      ...data,
-      docId: ref.id,
-    });
-    return ref;
+    const key = "modifiers";
+    const docId = await createWithSequentialId(
+      key,
+      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { counterKey: key, prefix: ID_PREFIXES.modifiers },
+    );
+
+    return doc(db, key, docId);
   },
 
   updateModifier: (docId: string, data: Partial<Omit<Modifier, "docId">>) =>
-    updateDoc(doc(db, "modifiers", docId), data as DocumentData),
+    updateDoc(doc(db, "modifiers", docId), {
+      ...data,
+      updatedAt: new Date(),
+    } as DocumentData),
 
   deleteModifier: (docId: string) => deleteDoc(doc(db, "modifiers", docId)),
 
   createModifierGroup: async (data: Omit<ModifierGroup, "docId">) => {
-    const ref = doc(collection(db, "modifierGroups"));
-    await setDoc(ref, {
-      ...data,
-      docId: ref.id,
-    });
-    return ref;
+    const key = "modifierGroups";
+    const docId = await createWithSequentialId(
+      key,
+      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { counterKey: key, prefix: ID_PREFIXES.modifierGroups },
+    );
+
+    return doc(db, key, docId);
   },
 
   updateModifierGroup: (
     docId: string,
     data: Partial<Omit<ModifierGroup, "docId">>,
-  ) => updateDoc(doc(db, "modifierGroups", docId), data as DocumentData),
+  ) =>
+    updateDoc(doc(db, "modifierGroups", docId), {
+      ...data,
+      updatedAt: new Date(),
+    } as DocumentData),
 
   // Deletes a modifier group along with its modifier documents and removes the
   // group ID from every product that references it — all in one atomic batch.
@@ -130,13 +146,21 @@ export const ProductService = {
   },
 
   createCategory: async (data: Omit<Category, "docId">) => {
-    const ref = doc(collection(db, "productCategories"));
-    await setDoc(ref, { ...data, docId: ref.id });
-    return ref;
+    const key = "productCategories";
+    const docId = await createWithSequentialId(
+      key,
+      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { counterKey: key, prefix: ID_PREFIXES.productCategories },
+    );
+
+    return doc(db, key, docId);
   },
 
   updateCategory: (docId: string, data: Partial<Omit<Category, "docId">>) =>
-    updateDoc(doc(db, "productCategories", docId), data as DocumentData),
+    updateDoc(doc(db, "productCategories", docId), {
+      ...data,
+      updatedAt: new Date(),
+    } as DocumentData),
 
   deleteCategory: (docId: string) =>
     deleteDoc(doc(db, "productCategories", docId)),

@@ -5,4 +5,6 @@ export interface Modifier {
   label?: string;
   priceDelta?: number;
   cost?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
 }

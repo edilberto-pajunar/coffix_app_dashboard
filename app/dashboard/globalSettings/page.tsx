@@ -14,6 +14,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -356,6 +358,7 @@ export default function GlobalSettingsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [flags, setFlags] = useState<FlagsState>(emptyFlags);
   const [loading, setLoading] = useState(false);
+  const { log } = useActivityLog();
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   useEffect(() => {
@@ -393,6 +396,13 @@ export default function GlobalSettingsPage() {
     setLoading(true);
     try {
       await GlobalSettingsService.updateSettings({ ...formToPayload(form), ...flags });
+      log({
+        category: LOG_CATEGORY.GLOBAL_SETTINGS,
+        severityLevel: LOG_SEVERITY.HIGH,
+        action: "Save Global Settings",
+        notes: "Admin changed app-wide settings (fees, discounts, top-up tiers, etc.)",
+        page: LOG_PAGE.GLOBAL_SETTINGS,
+      });
       toast.success("Settings saved.");
     } catch (err) {
       console.error(err);

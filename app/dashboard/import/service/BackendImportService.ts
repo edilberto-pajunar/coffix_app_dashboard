@@ -12,17 +12,11 @@ export interface ImportResult {
   errors: ImportError[];
 }
 
-function backendBase(): string {
-  const base = process.env.NEXT_PUBLIC_BACKEND_URL;
-  if (!base) {
-    throw new Error(
-      "NEXT_PUBLIC_BACKEND_URL is not configured. Set it in .env.local.",
-    );
-  }
-  return base.replace(/\/$/, "");
-}
-
-function triggerDownload(content: BlobPart, filename: string, mime: string): void {
+function triggerDownload(
+  content: BlobPart,
+  filename: string,
+  mime: string,
+): void {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -36,13 +30,18 @@ function triggerDownload(content: BlobPart, filename: string, mime: string): voi
  * Ask the backend to export a collection and download the returned CSV.
  * Handles both a raw `text/csv` response and a JSON envelope (`{ csv }` / `{ data }`).
  */
-export async function exportCollection(collection: CollectionKey): Promise<void> {
-  const res = await fetch(`${backendBase()}/import/export`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ collection }),
-    cache: "no-store",
-  });
+export async function exportCollection(
+  collection: CollectionKey,
+): Promise<void> {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/import/export`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collection }),
+      cache: "no-store",
+    },
+  );
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -54,7 +53,7 @@ export async function exportCollection(collection: CollectionKey): Promise<void>
 
   if (contentType.includes("application/json")) {
     const json = await res.json();
-    const csv = typeof json === "string" ? json : json.csv ?? json.data ?? "";
+    const csv = typeof json === "string" ? json : (json.csv ?? json.data ?? "");
     if (!csv) throw new Error("Export response contained no CSV data.");
     triggerDownload(csv, filename, "text/csv");
     return;
@@ -76,11 +75,14 @@ export async function importCollection(
   form.append("collection", collection);
   form.append("file", file);
 
-  const res = await fetch(`${backendBase()}/import/import`, {
-    method: "POST",
-    body: form,
-    cache: "no-store",
-  });
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/import/import`,
+    {
+      method: "POST",
+      body: form,
+      cache: "no-store",
+    },
+  );
 
   const json = await res.json().catch(() => null);
 

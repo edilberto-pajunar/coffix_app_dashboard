@@ -6,8 +6,11 @@ import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { escapeCSV, downloadCSV } from "@/app/utils/csv";
 import { ModifierGroupsFilterBar } from "./components/ModifierGroupsFilterBar";
+import { useActivityLog } from "../logs/hooks/useActivityLog";
+import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
 type NewGroupForm = {
     name: string;
@@ -25,6 +28,7 @@ export default function ModifierGroupsPage() {
     const modifierGroups = useDashboardStore((s) => s.modifierGroups);
     const modifiers = useDashboardStore((s) => s.modifiers);
     const products = useDashboardStore((s) => s.products);
+    const { log } = useActivityLog();
 
     const router = useRouter();
     const [search, setSearch] = useState("");
@@ -107,6 +111,15 @@ export default function ModifierGroupsPage() {
                 // selectionType: form.selectionType,
                 required: form.required,
                 modifierIds: [],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            log({
+                category: LOG_CATEGORY.MODIFIER_GROUPS,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Create Modifier Group",
+                notes: `Admin created a modifier group ${form.name.trim()}`,
+                page: LOG_PAGE.MODIFIER_GROUPS,
             });
             toast.success("Modifier group created successfully.");
             setForm(emptyForm);
@@ -122,12 +135,22 @@ export default function ModifierGroupsPage() {
     async function handleDelete() {
         if (!deleteTargetId) return;
         setDeleteLoading(true);
+        // Captured before the cascade removes the group and its modifiers.
+        const groupName = deleteTargetGroup?.name ?? deleteTargetId;
+        const modifierCount = (deleteTargetGroup?.modifierIds ?? []).length;
         try {
             await ProductService.deleteModifierGroupCascade(
                 deleteTargetId,
                 deleteTargetGroup?.modifierIds ?? [],
                 productsUsingGroup.map((p) => p.docId).filter((id): id is string => !!id),
             );
+            log({
+                category: LOG_CATEGORY.MODIFIER_GROUPS,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Delete Modifier Group",
+                notes: `Admin deleted modifier group ${groupName} and its ${modifierCount} modifier${modifierCount !== 1 ? "s" : ""}`,
+                page: LOG_PAGE.MODIFIER_GROUPS,
+            });
             toast.success("Modifier group and its modifiers deleted.");
             setDeleteTargetId(null);
         } catch (err) {
@@ -281,12 +304,11 @@ export default function ModifierGroupsPage() {
                 {errors.selectionType && <p className="mt-1 text-xs text-error">Selection type is required.</p>}
               </div> */}
 
-                            <label className="flex items-center gap-2 text-sm text-black">
-                                <input
-                                    type="checkbox"
+                            <label htmlFor="modifier-group-required" className="flex cursor-pointer items-center gap-2 text-sm text-black">
+                                <Checkbox
+                                    id="modifier-group-required"
                                     checked={form.required}
-                                    onChange={(e) => setField("required", e.target.checked)}
-                                    className="accent-primary"
+                                    onCheckedChange={(c) => setField("required", c === true)}
                                 />
                                 Required
                             </label>

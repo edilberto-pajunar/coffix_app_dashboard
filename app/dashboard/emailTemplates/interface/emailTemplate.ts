@@ -8,4 +8,5 @@ export interface EmailTemplate {
   notes?: string;
   updatedAt?: Timestamp;
   updatedBy?: string;
+  createdAt?: Date;
 }

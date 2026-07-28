@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useUserStore } from "../store/useUserStore";
@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { UsersFilterBar } from "../components/UsersFilterBar";
 import { AddCouponDialog } from "@/app/dashboard/coupons/components/AddCouponDialog";
 
@@ -56,33 +57,6 @@ function getInitials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-}
-
-function IndeterminateCheckbox({
-  checked,
-  indeterminate,
-  onChange,
-  onClick,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  onChange: () => void;
-  onClick?: (e: React.MouseEvent) => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      onClick={onClick}
-      className="h-4 w-4 cursor-pointer accent-primary"
-    />
-  );
 }
 
 export default function UsersPage() {
@@ -524,10 +498,9 @@ export default function UsersPage() {
           <thead>
             <tr className="border-b border-border bg-background">
               <th className="w-10 px-5 py-3">
-                <IndeterminateCheckbox
-                  checked={allSelected}
-                  indeterminate={someSelected}
-                  onChange={toggleSelectAll}
+                <Checkbox
+                  checked={someSelected ? "indeterminate" : allSelected}
+                  onCheckedChange={toggleSelectAll}
                 />
               </th>
               <th
@@ -565,12 +538,10 @@ export default function UsersPage() {
                         toggleUser(user.docId!);
                       }}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={isSelected}
-                        onChange={() => toggleUser(user.docId!)}
+                        onCheckedChange={() => toggleUser(user.docId!)}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-4 w-4 cursor-pointer accent-primary"
                       />
                     </td>
                     <td className="px-5 py-3">

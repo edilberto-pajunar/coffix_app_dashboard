@@ -5,7 +5,7 @@ export interface DayHours {
 }
 
 export interface HolidayHours extends DayHours {
-  title?: string;       // e.g. "Good Friday"
+  title?: string; // e.g. "Good Friday"
   description?: string; // e.g. "Reduced hours for public holiday"
 }
 
@@ -16,7 +16,7 @@ export interface Store {
   gstNumber?: string | null;
   imageUrl?: string | null;
   invoiceText?: string | null;
-  location?: string;
+  location?: string; // "lat,lng" e.g. "31.00,33.00"
   name?: string;
   openingHours?: Record<string, DayHours>;
   holidayHours?: Record<string, HolidayHours>; // keys: "yyyy-mm-dd"
@@ -25,6 +25,31 @@ export interface Store {
   contactNumber?: string;
   printerId?: string;
   city?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+  deletedAt?: Date;
+  isDeleted?: boolean | false; // default to false
+}
+
+export type LatLng = { lat: string; lng: string };
+
+/** Splits a stored "lat,lng" string into form fields. Returns empty strings when absent/malformed. */
+export function parseLocation(location?: string | null): LatLng {
+  const [lat = "", lng = ""] = (location ?? "").split(",").map((s) => s.trim());
+  return { lat, lng };
+}
+
+/** Joins form fields into the stored "lat,lng" format. */
+export function formatLocation(lat: string, lng: string): string {
+  return `${lat.trim()},${lng.trim()}`;
+}
+
+/** True when the value is a finite number within [-limit, limit]. */
+export function isValidCoordinate(value: string, limit: 90 | 180): boolean {
+  const trimmed = value.trim();
+  if (trimmed === "") return false;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && Math.abs(n) <= limit;
 }
 
 export function isStoreOpenAt(store: Store, dt: Date = new Date()): boolean {
@@ -33,7 +58,10 @@ export function isStoreOpenAt(store: Store, dt: Date = new Date()): boolean {
   return dayHoursContains(hours, dt);
 }
 
-export function effectiveHoursFor(store: Store, date: Date = new Date()): HolidayHours | DayHours | undefined {
+export function effectiveHoursFor(
+  store: Store,
+  date: Date = new Date(),
+): HolidayHours | DayHours | undefined {
   const dateKey = date.toLocaleDateString("en-CA"); // "yyyy-mm-dd" in local time
   if (store.holidayHours?.[dateKey]) return store.holidayHours[dateKey];
   return store.openingHours?.[weekdayKey(date.getDay())];

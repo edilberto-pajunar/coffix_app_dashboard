@@ -3,5 +3,7 @@ export interface ModifierGroup {
   modifierIds: string[];
   name?: string;
   required?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
   // selectionType?: string;
 }

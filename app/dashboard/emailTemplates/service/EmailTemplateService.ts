@@ -5,13 +5,13 @@ import {
   doc,
   DocumentData,
   onSnapshot,
-  setDoc,
   Timestamp,
   Unsubscribe,
   updateDoc,
 } from "firebase/firestore";
 import { EmailTemplate } from "../interface/emailTemplate";
-import { formatDocId } from "@/app/utils/formatting";
+import { createWithSequentialId } from "@/app/utils/generateId";
+import { ID_PREFIXES } from "@/app/utils/constant";
 
 export const EmailTemplateService = {
   listenToTemplates: (onUpdate: (templates: EmailTemplate[]) => void): Unsubscribe =>
@@ -23,17 +23,25 @@ export const EmailTemplateService = {
       onUpdate(templates);
     }),
 
+  // The document ID is a sequential, human-readable code (TPL-000001) rather than a
+  // slug derived from the template name, allocated atomically via a counter document.
   createTemplate: async (
     data: Omit<EmailTemplate, "docId" | "updatedAt">,
     updatedBy: string
   ) => {
-    const docId = formatDocId(data.name);
-    await setDoc(doc(db, "emails", docId), {
-      ...data,
-      docId,
-      updatedBy,
-      updatedAt: Timestamp.now(),
-    });
+    const key = "emails";
+    const docId = await createWithSequentialId(
+      key,
+      {
+        ...data,
+        updatedBy,
+        createdAt: new Date(),
+        updatedAt: Timestamp.now(),
+      } as Record<string, unknown>,
+      { counterKey: key, prefix: ID_PREFIXES.emails },
+    );
+
+    return doc(db, key, docId);
   },
 
   updateTemplate: (
