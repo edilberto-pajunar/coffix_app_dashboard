@@ -3,7 +3,6 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
-  deleteDoc,
   doc,
   DocumentData,
   onSnapshot,
@@ -34,6 +33,12 @@ function toStringArray(value: unknown): string[] {
   return [];
 }
 
+// Deletes are soft: documents are retained so historical transactions can still
+// resolve product names and modifier labels, so hide them from the live UI here.
+function notDeleted<T extends { isDeleted?: boolean }>(items: T[]): T[] {
+  return items.filter((item) => !item.isDeleted);
+}
+
 function normalizeProduct(product: Product): Product {
   return {
     ...product,
@@ -46,26 +51,26 @@ function normalizeProduct(product: Product): Product {
 export const ProductService = {
   listenToProducts: (onUpdate: (products: Product[]) => void): Unsubscribe =>
     onSnapshot(collection(db, "products"), (snap) =>
-      onUpdate(snapToArray<Product>(snap).map(normalizeProduct)),
+      onUpdate(notDeleted(snapToArray<Product>(snap)).map(normalizeProduct)),
     ),
 
   listenToModifiers: (onUpdate: (modifiers: Modifier[]) => void): Unsubscribe =>
     onSnapshot(collection(db, "modifiers"), (snap) =>
-      onUpdate(snapToArray<Modifier>(snap)),
+      onUpdate(notDeleted(snapToArray<Modifier>(snap))),
     ),
 
   listenToModifierGroups: (
     onUpdate: (groups: ModifierGroup[]) => void,
   ): Unsubscribe =>
     onSnapshot(collection(db, "modifierGroups"), (snap) =>
-      onUpdate(snapToArray<ModifierGroup>(snap)),
+      onUpdate(notDeleted(snapToArray<ModifierGroup>(snap))),
     ),
 
   listenToCategories: (
     onUpdate: (categories: Category[]) => void,
   ): Unsubscribe =>
     onSnapshot(collection(db, "productCategories"), (snap) =>
-      onUpdate(snapToArray<Category>(snap)),
+      onUpdate(notDeleted(snapToArray<Category>(snap))),
     ),
 
   // The document ID is a sequential, human-readable code (PRD-000001) rather than a
@@ -74,7 +79,7 @@ export const ProductService = {
     const key = "products";
     const docId = await createWithSequentialId(
       key,
-      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { ...data, createdAt: new Date(), order: 0 } as Record<string, unknown>,
       { counterKey: key, prefix: ID_PREFIXES.products },
     );
     return doc(db, key, docId);
@@ -86,13 +91,18 @@ export const ProductService = {
       updatedAt: new Date(),
     } as DocumentData),
 
-  deleteProduct: (docId: string) => deleteDoc(doc(db, "products", docId)),
+  deleteProduct: (docId: string) => {
+    updateDoc(doc(db, "products", docId), {
+      isDeleted: true,
+      deletedAt: new Date(),
+    } as DocumentData);
+  },
 
   createModifier: async (data: Omit<Modifier, "docId">) => {
     const key = "modifiers";
     const docId = await createWithSequentialId(
       key,
-      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { ...data, createdAt: new Date(), order: 0 } as Record<string, unknown>,
       { counterKey: key, prefix: ID_PREFIXES.modifiers },
     );
 
@@ -105,13 +115,18 @@ export const ProductService = {
       updatedAt: new Date(),
     } as DocumentData),
 
-  deleteModifier: (docId: string) => deleteDoc(doc(db, "modifiers", docId)),
+  deleteModifier: (docId: string) => {
+    updateDoc(doc(db, "modifiers", docId), {
+      isDeleted: true,
+      deletedAt: new Date(),
+    } as DocumentData);
+  },
 
   createModifierGroup: async (data: Omit<ModifierGroup, "docId">) => {
     const key = "modifierGroups";
     const docId = await createWithSequentialId(
       key,
-      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { ...data, createdAt: new Date(), order: 0 } as Record<string, unknown>,
       { counterKey: key, prefix: ID_PREFIXES.modifierGroups },
     );
 
@@ -127,21 +142,29 @@ export const ProductService = {
       updatedAt: new Date(),
     } as DocumentData),
 
-  // Deletes a modifier group along with its modifier documents and removes the
-  // group ID from every product that references it — all in one atomic batch.
+  // Soft-deletes a modifier group along with its modifier documents and removes
+  // the group ID from every product that references it — all in one atomic batch.
+  // The documents are retained so historical transactions can still resolve labels.
   deleteModifierGroupCascade: async (
     groupDocId: string,
     modifierIds: string[],
     affectedProductIds: string[],
   ) => {
     const batch = writeBatch(db);
+    const deletedAt = new Date();
     affectedProductIds.forEach((pid) =>
       batch.update(doc(db, "products", pid), {
         modifierGroupIds: arrayRemove(groupDocId),
+        updatedAt: deletedAt,
       }),
     );
-    modifierIds.forEach((mid) => batch.delete(doc(db, "modifiers", mid)));
-    batch.delete(doc(db, "modifierGroups", groupDocId));
+    modifierIds.forEach((mid) =>
+      batch.update(doc(db, "modifiers", mid), { isDeleted: true, deletedAt }),
+    );
+    batch.update(doc(db, "modifierGroups", groupDocId), {
+      isDeleted: true,
+      deletedAt,
+    });
     await batch.commit();
   },
 
@@ -149,7 +172,7 @@ export const ProductService = {
     const key = "productCategories";
     const docId = await createWithSequentialId(
       key,
-      { ...data, createdAt: new Date() } as Record<string, unknown>,
+      { ...data, createdAt: new Date(), order: 0 } as Record<string, unknown>,
       { counterKey: key, prefix: ID_PREFIXES.productCategories },
     );
 
@@ -162,8 +185,12 @@ export const ProductService = {
       updatedAt: new Date(),
     } as DocumentData),
 
-  deleteCategory: (docId: string) =>
-    deleteDoc(doc(db, "productCategories", docId)),
+  deleteCategory: (docId: string) => {
+    updateDoc(doc(db, "productCategories", docId), {
+      isDeleted: true,
+      deletedAt: new Date(),
+    } as DocumentData);
+  },
 
   addModifierToGroup: (groupDocId: string, modifierDocId: string) =>
     updateDoc(doc(db, "modifierGroups", groupDocId), {

@@ -48,6 +48,5 @@ export const StoreService = {
     updateDoc(doc(db, "stores", docId), {
       isDeleted: true,
       deletedAt: new Date(),
-      updatedAt: new Date(),
     } as DocumentData),
 };

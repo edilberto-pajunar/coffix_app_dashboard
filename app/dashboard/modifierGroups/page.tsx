@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { escapeCSV, downloadCSV } from "@/app/utils/csv";
 import { ModifierGroupsFilterBar } from "./components/ModifierGroupsFilterBar";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
@@ -14,31 +13,29 @@ import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConst
 
 type NewGroupForm = {
     name: string;
-    selectionType: string;
-    required: boolean;
 };
 
 const emptyForm: NewGroupForm = {
     name: "",
-    selectionType: "",
-    required: false,
 };
 
 export default function ModifierGroupsPage() {
     const modifierGroups = useDashboardStore((s) => s.modifierGroups);
-    const modifiers = useDashboardStore((s) => s.modifiers);
     const products = useDashboardStore((s) => s.products);
     const { log } = useActivityLog();
 
     const router = useRouter();
     const [search, setSearch] = useState("");
-    const [requiredFilter, setRequiredFilter] = useState<"All" | "Required" | "Optional">("All");
 
-    const anyFilterActive = useMemo(() => search.trim() !== "" || requiredFilter !== "All", [search, requiredFilter]);
+    const countModifiers = useCallback(
+        (group: { modifierIds?: string[] }) => (group.modifierIds ?? []).length,
+        [],
+    );
+
+    const anyFilterActive = useMemo(() => search.trim() !== "", [search]);
 
     function clearAllFilters() {
       setSearch("");
-      setRequiredFilter("All");
     }
     type GroupSortKey = "name" | "count";
     type SortDir = "asc" | "desc";
@@ -53,8 +50,6 @@ export default function ModifierGroupsPage() {
     const filtered = useMemo(() => {
         const q = search.toLowerCase();
         let result = modifierGroups.filter((g) => {
-            if (requiredFilter === "Required" && !g.required) return false;
-            if (requiredFilter === "Optional" && g.required) return false;
             if (q && !(g.name ?? "").toLowerCase().includes(q)) return false;
             return true;
         });
@@ -63,14 +58,12 @@ export default function ModifierGroupsPage() {
             if (sortKey === "name") {
                 cmp = (a.name ?? "").localeCompare(b.name ?? "");
             } else {
-                const countA = modifiers.filter((m) => a.modifierIds?.includes(m.docId ?? "")).length;
-                const countB = modifiers.filter((m) => b.modifierIds?.includes(m.docId ?? "")).length;
-                cmp = countA - countB;
+                cmp = countModifiers(a) - countModifiers(b);
             }
             return sortDir === "asc" ? cmp : -cmp;
         });
         return result;
-    }, [modifierGroups, modifiers, search, requiredFilter, sortKey, sortDir]);
+    }, [modifierGroups, countModifiers, search, sortKey, sortDir]);
 
     const [showCreate, setShowCreate] = useState(false);
     const [form, setForm] = useState<NewGroupForm>(emptyForm);
@@ -94,7 +87,6 @@ export default function ModifierGroupsPage() {
     async function handleCreate() {
         const newErrors: Partial<Record<keyof NewGroupForm, boolean>> = {
             name: !form.name.trim(),
-            // selectionType: !form.selectionType,
         };
 
         if (Object.values(newErrors).some(Boolean)) {
@@ -108,8 +100,6 @@ export default function ModifierGroupsPage() {
         try {
             await ProductService.createModifierGroup({
                 name: form.name.trim(),
-                // selectionType: form.selectionType,
-                required: form.required,
                 modifierIds: [],
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -162,11 +152,10 @@ export default function ModifierGroupsPage() {
     }
 
     function exportToCSV() {
-        downloadCSV("modifier-groups", ["docId", "name", "required", "modifierCount"], modifierGroups.map((g) => [
+        downloadCSV("modifier-groups", ["docId", "name", "modifierCount"], modifierGroups.map((g) => [
             escapeCSV(g.docId ?? ""),
             escapeCSV(g.name ?? ""),
-            g.required ?? false,
-            modifiers.filter((m) => g.modifierIds?.includes(m.docId ?? "")).length,
+            countModifiers(g),
         ]));
     }
 
@@ -189,7 +178,6 @@ export default function ModifierGroupsPage() {
 
             <ModifierGroupsFilterBar
                 search={search} setSearch={setSearch}
-                requiredFilter={requiredFilter} setRequiredFilter={setRequiredFilter}
                 anyFilterActive={anyFilterActive}
                 clearAllFilters={clearAllFilters}
             />
@@ -204,8 +192,6 @@ export default function ModifierGroupsPage() {
                             >
                                 Name {sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
                             </th>
-                            {/* <th className="px-5 py-3 text-left font-medium text-light-grey">Selection Type</th> */}
-                            <th className="px-5 py-3 text-left font-medium text-light-grey">Required</th>
                             <th
                                 onClick={() => toggleSort("count")}
                                 className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
@@ -218,15 +204,13 @@ export default function ModifierGroupsPage() {
                     <tbody className="divide-y divide-border">
                         {filtered.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className="px-5 py-10 text-center text-light-grey">
+                                <td colSpan={3} className="px-5 py-10 text-center text-light-grey">
                                     No modifier groups found.
                                 </td>
                             </tr>
                         ) : (
                             filtered.map((group) => {
-                                const modifierCount = modifiers.filter((m) =>
-                                    group.modifierIds?.includes(m.docId ?? ""),
-                                ).length;
+                                const modifierCount = countModifiers(group);
                                 return (
                                     <tr
                                         key={group.docId}
@@ -234,18 +218,6 @@ export default function ModifierGroupsPage() {
                                         className="cursor-pointer transition-colors hover:bg-background"
                                     >
                                         <td className="px-5 py-3 font-medium text-black">{group.name ?? "—"}</td>
-                                        {/* <td className="px-5 py-3">
-                      <span className="rounded-full bg-soft-grey px-2.5 py-1 text-xs font-medium text-black capitalize">
-                        {group.selectionType ?? "—"}
-                      </span>
-                    </td> */}
-                                        <td className="px-5 py-3">
-                                            {group.required ? (
-                                                <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-success">Yes</span>
-                                            ) : (
-                                                <span className="rounded-full px-2 py-0.5 text-xs ">No</span>
-                                            )}
-                                        </td>
                                         <td className="px-5 py-3 text-light-grey">{modifierCount}</td>
                                         <td className="px-5 py-3 text-right">
                                             <Button
@@ -290,28 +262,6 @@ export default function ModifierGroupsPage() {
                                 {errors.name && <p className="mt-1 text-xs text-error">Name is required.</p>}
                             </div>
 
-                            {/* <div>
-                <label className="mb-1.5 block text-xs text-light-grey">Selection Type *</label>
-                <select
-                  className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.selectionType ? "border-error" : "border-border"}`}
-                  value={form.selectionType}
-                  onChange={(e) => setField("selectionType", e.target.value)}
-                >
-                  <option value="">— Select type —</option>
-                  <option value="single">Single</option>
-                  <option value="multiple">Multiple</option>
-                </select>
-                {errors.selectionType && <p className="mt-1 text-xs text-error">Selection type is required.</p>}
-              </div> */}
-
-                            <label htmlFor="modifier-group-required" className="flex cursor-pointer items-center gap-2 text-sm text-black">
-                                <Checkbox
-                                    id="modifier-group-required"
-                                    checked={form.required}
-                                    onCheckedChange={(c) => setField("required", c === true)}
-                                />
-                                Required
-                            </label>
                         </div>
 
                         <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
@@ -343,7 +293,8 @@ export default function ModifierGroupsPage() {
                             <p className="text-sm text-light-grey">
                                 Are you sure you want to delete{" "}
                                 <strong className="text-black">{deleteTargetGroup?.name ?? "this modifier group"}</strong>?
-                                Its modifiers will be deleted too. This action cannot be undone.
+                                Its modifiers will be removed too. The group will be hidden from the
+                                dashboard but kept on record so past transactions still show its name.
                             </p>
                             {productsUsingGroup.length > 0 && (
                                 <div className="rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">

@@ -143,8 +143,6 @@ export const importSchemas = {
       modifierCount: { required: false, type: "array" },
       modifierIds: { required: false, type: "array" },
       name: { required: true, type: "string" },
-      required: { required: false, type: "boolean", default: false },
-      selectionType: { required: false, type: "string" },
     },
   },
   modifiers: {

@@ -1,17 +1,13 @@
 "use client";
 
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-
 interface ModifierGroupsFilterBarProps {
   search: string; setSearch: (v: string) => void;
-  requiredFilter: "All" | "Required" | "Optional"; setRequiredFilter: (v: "All" | "Required" | "Optional") => void;
   anyFilterActive: boolean;
   clearAllFilters: () => void;
 }
 
 export function ModifierGroupsFilterBar({
   search, setSearch,
-  requiredFilter, setRequiredFilter,
   anyFilterActive,
   clearAllFilters,
 }: ModifierGroupsFilterBarProps) {
@@ -32,22 +28,6 @@ export function ModifierGroupsFilterBar({
             onChange={(e) => setSearch(e.target.value)}
             className="h-7 w-full bg-transparent text-sm text-black outline-none placeholder:text-light-grey"
           />
-        </div>
-
-        {/* Required */}
-        <div className={`flex flex-col gap-1 rounded-lg border bg-white px-3 py-1.5 min-w-[150px] ${requiredFilter !== "All" ? "border-primary" : "border-border"}`}>
-          <span className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-light-grey">
-            Required
-            {requiredFilter !== "All" && <button onClick={() => setRequiredFilter("All")} className="ml-1 text-light-grey hover:text-black">×</button>}
-          </span>
-          <Select value={requiredFilter} onValueChange={(v) => setRequiredFilter(v as "All" | "Required" | "Optional")}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All</SelectItem>
-              <SelectItem value="Required">Required</SelectItem>
-              <SelectItem value="Optional">Optional</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         {anyFilterActive && (

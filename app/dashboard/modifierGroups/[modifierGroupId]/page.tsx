@@ -33,7 +33,7 @@ export default function ModifierGroupDetailPage() {
   const { log } = useActivityLog();
 
   const [dialog, setDialog] = useState<DialogMode>(null);
-  const [groupForm, setGroupForm] = useState({ name: "", required: false });
+  const [groupForm, setGroupForm] = useState({ name: "" });
   const [groupErrors, setGroupErrors] = useState<{ name?: boolean }>({});
   const [modifierForm, setModifierForm] = useState<ModifierForm>(emptyModifierForm);
   const [activeModifierId, setActiveModifierId] = useState<string | null>(null);
@@ -69,7 +69,6 @@ export default function ModifierGroupDetailPage() {
   function openEditGroup() {
     setGroupForm({
       name: group?.name ?? "",
-      required: group?.required ?? false,
     });
     setGroupErrors({});
     setDialog("edit-group");
@@ -110,7 +109,6 @@ export default function ModifierGroupDetailPage() {
     try {
       await ProductService.updateModifierGroup(group.docId, {
         name: groupForm.name.trim(),
-        required: groupForm.required,
       });
       log({
         category: LOG_CATEGORY.MODIFIER_GROUPS,
@@ -269,7 +267,6 @@ export default function ModifierGroupDetailPage() {
             ← Back to Modifier Groups
           </Button>
           <h1 className="text-2xl font-semibold text-black">{group.name ?? "—"}</h1>
-          <p className="mt-1 text-sm text-light-grey">{group.required ? "Required" : "Optional"}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={openEditGroup}>
@@ -385,14 +382,6 @@ export default function ModifierGroupDetailPage() {
                     />
                     {groupErrors.name && <p className="mt-1 text-xs text-error">Name is required.</p>}
                   </div>
-                  <label htmlFor="group-required" className="flex cursor-pointer items-center gap-2 text-sm text-black">
-                    <Checkbox
-                      id="group-required"
-                      checked={groupForm.required}
-                      onCheckedChange={(c) => setGroupForm((f) => ({ ...f, required: c === true }))}
-                    />
-                    Required
-                  </label>
                 </div>
                 <div className="mt-5 flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setDialog(null)}>Cancel</Button>
@@ -408,7 +397,7 @@ export default function ModifierGroupDetailPage() {
               <>
                 <h3 className="mb-2 text-lg font-semibold text-black">Delete Modifier Group</h3>
                 <p className="text-sm text-light-grey">
-                  Are you sure you want to delete <strong className="text-black">{group.name}</strong>? Its modifiers will be deleted too. This cannot be undone.
+                  Are you sure you want to delete <strong className="text-black">{group.name}</strong>? Its modifiers will be removed too. The group will be hidden from the dashboard but kept on record so past transactions still show its name.
                 </p>
                 {productsUsingGroup.length > 0 && (
                   <div className="mt-3 rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">

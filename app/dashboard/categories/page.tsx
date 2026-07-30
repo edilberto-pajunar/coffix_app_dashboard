@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
+import { Category } from "../products/interface/category";
 import { formatDocId } from "@/app/utils/formatting";
 import {
   CATEGORY_PROTECTED_FIELDS,
@@ -81,7 +82,7 @@ export default function CategoriesPage() {
     setOrderedCategories(reordered);
     await Promise.all(
       reordered.map((cat, i) =>
-        ProductService.updateCategory(cat.docId!, { order: String(i + 1) })
+        ProductService.updateCategory(cat.docId!, { order: i + 1 })
       )
     );
   }
@@ -95,7 +96,7 @@ export default function CategoriesPage() {
     setCategoryLoading(true);
     try {
       const data = { name: categoryForm.name.trim() };
-      if (categoryDialog === "create") {
+      if (categoryDialog === "create") { 
         await ProductService.createCategory({
           name: categoryForm.name.trim(),
           createdAt: new Date(),
@@ -244,14 +245,14 @@ export default function CategoriesPage() {
       let count = 0;
       for (const row of importPreview.validRows) {
         if (row.docId) {
-          const update: Record<string, string> = {};
+          const update: Partial<Omit<Category, "docId">> = {};
           if (row.name) update.name = row.name;
-          if (row.order) update.order = row.order;
+          if (row.order) update.order = Number(row.order);
           await ProductService.updateCategory(row.docId, update);
         } else {
           await ProductService.createCategory({
             name: row.name,
-            ...(row.order ? { order: row.order } : {}),
+            ...(row.order ? { order: Number(row.order) } : {}),
           });
         }
         count++;
