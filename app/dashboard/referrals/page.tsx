@@ -10,8 +10,10 @@ import { Referral } from "./interface/referral";
 import {
   REFERRAL_PROTECTED_FIELDS,
   REFERRAL_IMPORTABLE_FIELDS,
+  REFERRAL_EXPORTABLE_FIELDS,
 } from "./constants/referralFieldConstants";
-import { escapeCSV, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { parseCSVText } from "@/app/utils/csvUtils";
+import { exportRowsToCSV } from "@/app/utils/import";
 import { Button } from "@/components/ui/button";
 import { ReferralsFilterBar } from "./components/ReferralsFilterBar";
 import { formatDateTime } from "@/app/utils/formatting";
@@ -109,17 +111,7 @@ export default function ReferralsPage() {
   }, [referrals, search, statusFilter, sortKey, sortDir]);
 
   function exportToCSV() {
-    const headers = ["docId", "referrer", "referee", "referralTime", "disabled"];
-    const rows = filtered.map((r) =>
-      [
-        escapeCSV(r.docId ?? ""),
-        escapeCSV(r.referrer ?? ""),
-        escapeCSV(r.referee ?? ""),
-        escapeCSV(formatDateTime(r.referralTime)),
-        // String(r.disabled ?? false),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `referrals-${new Date().toISOString().slice(0, 10)}.csv`);
+    exportRowsToCSV(filtered, REFERRAL_EXPORTABLE_FIELDS, "referrals");
   }
 
   function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {

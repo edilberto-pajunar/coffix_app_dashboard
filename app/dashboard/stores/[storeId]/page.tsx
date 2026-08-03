@@ -31,12 +31,13 @@ type StoreEditForm = {
   gstNumber: string;
   invoiceText: string;
   printerId: string;
+  storeCode: string;
   openingHours: Record<Day, DayHoursForm>;
 };
 
 const REQUIRED: (keyof Omit<StoreEditForm, "openingHours">)[] = [
   "name", "email", "contactNumber", "address", "printerId",
-  "gstNumber", "invoiceText",
+  "gstNumber", "invoiceText", "storeCode",
 ];
 
 type DialogMode = "edit-store" | "edit-hours" | "add-holiday" | "edit-holiday" | "delete-holiday" | "delete-store" | null;
@@ -81,6 +82,7 @@ function storeToForm(store: Store): StoreEditForm {
     gstNumber: store.gstNumber ?? "",
     invoiceText: store.invoiceText ?? "",
     printerId: store.printerId ?? "",
+    storeCode: store.storeCode ?? "",
     openingHours,
   };
 }
@@ -339,6 +341,7 @@ export default function StoreDetailPage() {
         gstNumber: form.gstNumber.trim(),
         invoiceText: form.invoiceText.trim(),
         printerId: form.printerId.trim(),
+        storeCode: form.storeCode.trim(),
         openingHours,
       });
       log({
@@ -449,6 +452,7 @@ export default function StoreDetailPage() {
               { label: "GST Number", value: store.gstNumber },
               { label: "Invoice Text", value: store.invoiceText },
               { label: "Printer ID", value: store.printerId },
+              { label: "Store Code", value: store.storeCode },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between px-4 py-3">
                 <span className="text-xs text-light-grey">{label}</span>
@@ -684,6 +688,16 @@ export default function StoreDetailPage() {
                     onChange={(e) => setField("printerId", e.target.value)}
                   />
                   {errors.printerId && <p className="mt-1 text-xs text-error">Required.</p>}
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs text-light-grey">Store Code *</label>
+                  <input
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.storeCode ? "border-error" : "border-border"}`}
+                    value={form.storeCode}
+                    onChange={(e) => setField("storeCode", e.target.value)}
+                  />
+                  {errors.storeCode && <p className="mt-1 text-xs text-error">Required.</p>}
                 </div>
               </div>
 

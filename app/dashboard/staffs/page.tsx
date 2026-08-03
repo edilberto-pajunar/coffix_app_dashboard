@@ -10,15 +10,10 @@ import { Store } from "@/app/dashboard/stores/interface/store";
 import {
   STAFF_PROTECTED_FIELDS,
   STAFF_IMPORTABLE_FIELDS,
+  STAFF_EXPORTABLE_FIELDS,
 } from "./constants/staffFieldConstants";
-import {
-  escapeCSV,
-  tsToISO,
-  parseCSVText,
-  triggerCSVDownload,
-  formatArrayCell,
-  parseArrayCell,
-} from "@/app/utils/csvUtils";
+import { parseCSVText, parseArrayCell } from "@/app/utils/csvUtils";
+import { exportRowsToCSV } from "@/app/utils/import";
 import {
   Dialog,
   DialogContent,
@@ -334,20 +329,8 @@ export default function StaffsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function exportToCSV() {
-    const headers = ["docId", "email", "createdAt", "role", "storeIds", "disabled", "firstName", "lastName"];
-    const rows = displayed.map((s) =>
-      [
-        escapeCSV(s.docId ?? ""),
-        escapeCSV(s.email),
-        escapeCSV(tsToISO(s.createdAt)),
-        escapeCSV(s.role),
-        escapeCSV(formatArrayCell((s.storeIds ?? []).filter(Boolean))),
-        String(s.disabled ?? false),
-        escapeCSV(s.firstName ?? ""),
-        escapeCSV(s.lastName ?? ""),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `staffs-${new Date().toISOString().slice(0, 10)}.csv`);
+    const date = new Date().toISOString().slice(0, 10);
+    exportRowsToCSV(displayed, STAFF_EXPORTABLE_FIELDS, "staffs", `${date}-users.csv`);
   }
 
   function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
@@ -597,8 +580,9 @@ export default function StaffsPage() {
   // ── Utility: look up store names for display
   function storeNames(ids: string[] | undefined): string {
     if (!ids || ids.length === 0) return "N/A";
-    const names: string = ids
-      .map((id) => stores.find((s) => s.docId === id)?.name ?? id)
+    const names = ids
+      .map((id) => stores.find((s) => s.docId === id)?.name)
+      .filter((name): name is string => Boolean(name))
       .join(", ");
     return names || "N/A";
   }

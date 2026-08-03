@@ -6,7 +6,8 @@ import { Log } from "./interface/log";
 import { formatDateTime } from "@/app/utils/formatting";
 import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
 import { useStaffStore } from "@/app/dashboard/staffs/store/useStaffStore";
-import { escapeCSV, tsToISO, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { LOG_EXPORTABLE_FIELDS } from "./constants/logFieldConstants";
+import { exportRowsToCSV } from "@/app/utils/import";
 import { Button } from "@/components/ui/button";
 import { LogsFilterBar } from "./components/LogsFilterBar";
 import { LogSettingsDialog } from "./components/LogSettingsDialog";
@@ -159,21 +160,7 @@ export default function LogsPage() {
   }, [displayed, safePage]);
 
   function exportToCSV() {
-    const headers = ["docId", "time", "page", "category", "severityLevel", "action", "notes", "customerId", "userId"];
-    const rows = displayed.map((log) =>
-      [
-        escapeCSV(log.docId ?? ""),
-        escapeCSV(tsToISO(log.time) || formatDateTime(log.time)),
-        escapeCSV(log.page ?? ""),
-        escapeCSV(log.category ?? ""),
-        escapeCSV(String(log.severityLevel ?? "")),
-        escapeCSV(log.action ?? ""),
-        escapeCSV(log.notes ?? ""),
-        escapeCSV(log.customerId ?? ""),
-        escapeCSV(log.userId ?? ""),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `logs-${new Date().toISOString().slice(0, 10)}.csv`);
+    exportRowsToCSV(displayed, LOG_EXPORTABLE_FIELDS, "logs");
   }
 
   return (

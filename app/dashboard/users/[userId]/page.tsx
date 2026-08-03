@@ -71,7 +71,6 @@ type UserEditForm = {
   creditExpiry: string;
   qrId: string;
   preferredStoreId: string;
-  preferredStoreName: string;
   appVersion: string;
   getPurchaseInfoByMail: boolean;
   getPromotions: boolean;
@@ -101,7 +100,6 @@ function userToForm(user: AppUser): UserEditForm {
     creditExpiry: firestoreTimestampToDateString(user.creditExpiry),
     qrId: user.qrId ?? "",
     preferredStoreId: user.preferredStoreId ?? "",
-    preferredStoreName: user.preferredStoreName ?? "",
     appVersion: user.appVersion ?? "",
     getPurchaseInfoByMail: user.getPurchaseInfoByMail ?? false,
     getPromotions: user.getPromotions ?? false,
@@ -147,7 +145,7 @@ export default function UserDetailPage() {
 
   const preferredStore = stores.find((s) => s.docId === user.preferredStoreId);
   const preferredStoreLabel =
-    preferredStore?.name ?? user.preferredStoreName ?? "—";
+    preferredStore?.name ?? "—";
 
   // ── Handlers ──
 
@@ -209,7 +207,6 @@ export default function UserDetailPage() {
         creditExpiry: creditExpiryDate,
         qrId: form.qrId.trim() || undefined,
         preferredStoreId: form.preferredStoreId || undefined,
-        preferredStoreName: form.preferredStoreName || undefined,
         appVersion: form.appVersion.trim() || undefined,
         getPurchaseInfoByMail: form.getPurchaseInfoByMail,
         getPromotions: form.getPromotions,

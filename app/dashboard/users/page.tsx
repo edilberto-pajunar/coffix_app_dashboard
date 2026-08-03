@@ -12,8 +12,10 @@ import { AppUser } from "./interface/user";
 import {
   USER_PROTECTED_FIELDS,
   USER_IMPORTABLE_FIELDS,
+  USER_EXPORTABLE_FIELDS,
 } from "./constants/userFieldConstants";
-import { escapeCSV, tsToISO, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { parseCSVText } from "@/app/utils/csvUtils";
+import { exportRowsToCSV } from "@/app/utils/import";
 import {
   Dialog,
   DialogContent,
@@ -327,33 +329,8 @@ export default function UsersPage() {
   }
 
   function exportToCSV() {
-    const headers = ["docId", "email", "creditAvailable", "emailVerified", "lastLogin", "creditExpiry", "createdAt",
-      "firstName", "lastName", "nickName", "mobile", "birthday", "suburb", "city",
-      "preferredStoreId", "getPurchaseInfoByMail", "getPromotions", "allowWinACoffee", "disabled"];
-    const rows = filtered.map((u) =>
-      [
-        escapeCSV(u.docId ?? ""),
-        escapeCSV(u.email ?? ""),
-        String(u.creditAvailable ?? ""),
-        String(u.emailVerified ?? ""),
-        escapeCSV(tsToISO(u.lastLogin)),
-        escapeCSV(tsToISO(u.creditExpiry)),
-        escapeCSV(tsToISO(u.createdAt)),
-        escapeCSV(u.firstName ?? ""),
-        escapeCSV(u.lastName ?? ""),
-        escapeCSV(u.nickName ?? ""),
-        escapeCSV(u.mobile ?? ""),
-        escapeCSV(tsToISO(u.birthday)),
-        escapeCSV(u.suburb ?? ""),
-        escapeCSV(u.city ?? ""),
-        escapeCSV(u.preferredStoreId ?? ""),
-        String(u.getPurchaseInfoByMail ?? ""),
-        String(u.getPromotions ?? ""),
-        String(u.allowWinACoffee ?? ""),
-        String(u.disabled ?? ""),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `users-${new Date().toISOString().slice(0, 10)}.csv`);
+    const date = new Date().toISOString().slice(0, 10);
+    exportRowsToCSV(filtered, USER_EXPORTABLE_FIELDS, "users", `${date}-customers.csv`);
   }
 
   function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {

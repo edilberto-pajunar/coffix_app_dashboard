@@ -10,7 +10,8 @@ import { useAuth } from "@/app/lib/AuthContext";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
 import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 import { formatDateTime } from "@/app/utils/formatting";
-import { escapeCSV, tsToISO, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { exportRowsToCSV } from "@/app/utils/import";
+import { EMAIL_TEMPLATE_EXPORTABLE_FIELDS } from "./constants/emailTemplateFieldConstants";
 import { Button } from "@/components/ui/button";
 import { EmailTemplatesFilterBar } from "./components/EmailTemplatesFilterBar";
 import { renderEmailTemplate } from "@/app/lib/renderEmailTemplate";
@@ -128,17 +129,7 @@ export default function EmailTemplatesPage() {
   }, [templates, search, sortKey, sortDir]);
 
   function exportToCSV() {
-    const headers = ["docId", "name", "subject", "notes", "updatedAt"];
-    const rows = displayed.map((t) =>
-      [
-        escapeCSV(t.docId),
-        escapeCSV(t.name),
-        escapeCSV(t.subject),
-        escapeCSV(t.notes ?? ""),
-        escapeCSV(t.updatedAt ? tsToISO(t.updatedAt.toDate()) : ""),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `email-templates-${new Date().toISOString().slice(0, 10)}.csv`);
+    exportRowsToCSV(displayed, EMAIL_TEMPLATE_EXPORTABLE_FIELDS, "email-templates");
   }
 
   const [showCreate, setShowCreate] = useState(false);

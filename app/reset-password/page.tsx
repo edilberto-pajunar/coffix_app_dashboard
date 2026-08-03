@@ -4,10 +4,10 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Eye, EyeOff } from "lucide-react";
+import { CheckCircle, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type PageState = "verifying" | "invalid" | "form" | "submitting";
+type PageState = "verifying" | "invalid" | "form" | "submitting" | "success";
 
 const REASON_MESSAGES: Record<string, string> = {
   expired: "This reset link has expired. Please request a new one.",
@@ -92,8 +92,7 @@ function ResetPasswordContent() {
       );
 
       if (res.ok) {
-        toast.success("Password updated successfully.");
-        router.push("/login");
+        setState("success");
       } else if (res.status === 400 || res.status === 422) {
         const data = await res.json().catch(() => ({}));
         setFieldError(
@@ -129,6 +128,16 @@ function ResetPasswordContent() {
               Request a new link
             </Link>
           </>
+        )}
+
+        {state === "success" && (
+         <div>
+            <p className="text-xl font-semibold text-primary">Password updated successfully</p>
+           <p className="text-sm text-light-grey">
+            Your password has been updated successfully. You can now close
+            this page and sign in with your new password.
+          </p>
+         </div>
         )}
 
         {(state === "form" || state === "submitting") && (
@@ -194,7 +203,7 @@ function ResetPasswordContent() {
                 </div>
               </div>
               {fieldError && (
-                <p className="text-xs text-[var(--error)]">{fieldError}</p>
+                <p className="text-xs text-error">{fieldError}</p>
               )}
               <Button
                 type="submit"
@@ -206,11 +215,13 @@ function ResetPasswordContent() {
           </>
         )}
 
-        <p className="mt-4 text-center text-xs text-light-grey">
-          <Link href="/login" className="text-primary hover:underline">
-            Back to sign in
-          </Link>
-        </p>
+        {state !== "success" && (
+          <p className="mt-4 text-center text-xs text-light-grey">
+            <Link href="/login" className="text-primary hover:underline">
+              Back to sign in
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

@@ -46,6 +46,13 @@ export const USER_EXPORTABLE_FIELDS = [
   "getPromotions",
   "allowWinACoffee",
   "disabled",
+  "appVersion",
+  "scheduleOrder",
+  "shareCredit",
+  "withdrawBalance",
+  "coffixCreditAvailable",
+  "allowCoffeeForHome",
+  "allowNotifications",
 ] as const;
 
 export const USER_REQUIRED_FIELDS: string[] = [];

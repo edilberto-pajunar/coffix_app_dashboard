@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
 import { Button } from "@/components/ui/button";
-import { escapeCSV, downloadCSV } from "@/app/utils/csv";
+import { exportRowsToCSV } from "@/app/utils/import";
+import { MODIFIER_GROUP_EXPORTABLE_FIELDS } from "./constants/modifierGroupFieldConstants";
 import { ModifierGroupsFilterBar } from "./components/ModifierGroupsFilterBar";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
 import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
@@ -152,11 +153,7 @@ export default function ModifierGroupsPage() {
     }
 
     function exportToCSV() {
-        downloadCSV("modifier-groups", ["docId", "name", "modifierCount"], modifierGroups.map((g) => [
-            escapeCSV(g.docId ?? ""),
-            escapeCSV(g.name ?? ""),
-            countModifiers(g),
-        ]));
+        exportRowsToCSV(modifierGroups, MODIFIER_GROUP_EXPORTABLE_FIELDS, "modifier-groups");
     }
 
     return (

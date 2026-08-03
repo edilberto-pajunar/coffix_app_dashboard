@@ -12,14 +12,13 @@ import {
   PRODUCT_PROTECTED_FIELDS,
   PRODUCT_IMPORTABLE_FIELDS,
   PRODUCT_REQUIRED_FIELDS,
+  PRODUCT_EXPORTABLE_FIELDS,
 } from "./constants/productFieldConstants";
 import {
-  escapeCSV,
   parseCSVText,
-  triggerCSVDownload,
-  formatArrayCell,
   parseArrayCell,
 } from "@/app/utils/csvUtils";
+import { exportRowsToCSV } from "@/app/utils/import";
 import Image from "next/image";
 import {
   Dialog,
@@ -435,22 +434,7 @@ export default function ProductsPage() {
   }
 
   function exportToCSV() {
-    const headers = ["docId", "name", "price", "cost", "order", "categoryId", "modifierGroupIds", "availableToStores", "disabledStores", "imageUrl"];
-    const rows = filtered.map((p) =>
-      [
-        escapeCSV(p.docId ?? ""),
-        escapeCSV(p.name ?? ""),
-        String(p.price ?? ""),
-        String(p.cost ?? ""),
-        String(p.order ?? ""),
-        escapeCSV(p.categoryId ?? ""),
-        escapeCSV(formatArrayCell(p.modifierGroupIds)),
-        escapeCSV(formatArrayCell(p.availableToStores)),
-        escapeCSV(formatArrayCell(p.disabledStores)),
-        escapeCSV(p.imageUrl ?? ""),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `products-${new Date().toISOString().slice(0, 10)}.csv`);
+    exportRowsToCSV(filtered, PRODUCT_EXPORTABLE_FIELDS, "products");
   }
 
   function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {

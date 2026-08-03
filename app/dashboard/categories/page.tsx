@@ -10,8 +10,10 @@ import {
   CATEGORY_PROTECTED_FIELDS,
   CATEGORY_IMPORTABLE_FIELDS,
   CATEGORY_REQUIRED_FIELDS,
+  CATEGORY_EXPORTABLE_FIELDS,
 } from "./constants/categoryFieldConstants";
-import { escapeCSV, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { parseCSVText } from "@/app/utils/csvUtils";
+import { exportRowsToCSV } from "@/app/utils/import";
 import {
   Dialog,
   DialogContent,
@@ -153,15 +155,7 @@ export default function CategoriesPage() {
   }
 
   function exportToCSV() {
-    const headers = ["docId", "name", "order"];
-    const rows = orderedCategories.map((c) =>
-      [
-        escapeCSV(c.docId ?? ""),
-        escapeCSV(c.name ?? ""),
-        String(c.order ?? ""),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `categories-${new Date().toISOString().slice(0, 10)}.csv`);
+    exportRowsToCSV(orderedCategories, CATEGORY_EXPORTABLE_FIELDS, "categories");
   }
 
   function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {

@@ -13,8 +13,10 @@ import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConst
 import {
   STORE_PROTECTED_FIELDS,
   STORE_IMPORTABLE_FIELDS,
+  STORE_EXPORTABLE_FIELDS,
 } from "./constants/storeFieldConstants";
-import { escapeCSV, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { parseCSVText } from "@/app/utils/csvUtils";
+import { exportRowsToCSV } from "@/app/utils/import";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -50,6 +52,7 @@ type StoreForm = {
   gstNumber: string;
   invoiceText: string;
   printerId: string;
+  storeCode: string;
   openingHours: Record<Day, DayHoursForm>;
 };
 
@@ -67,12 +70,13 @@ const emptyForm: StoreForm = {
   gstNumber: "",
   invoiceText: "",
   printerId: "",
+  storeCode: "",
   openingHours: Object.fromEntries(DAYS.map((d) => [d, { ...defaultDayHours }])) as Record<Day, DayHoursForm>,
 };
 
 const REQUIRED: (keyof Omit<StoreForm, "openingHours">)[] = [
   "name", "email", "contactNumber", "address", "printerId",
-  "gstNumber", "invoiceText",
+  "gstNumber", "invoiceText", "storeCode",
 ];
 
 export default function StoresPage() {
@@ -211,24 +215,7 @@ export default function StoresPage() {
   }
 
   function exportToCSV() {
-    const headers = ["docId", "name", "address", "email", "contactNumber", "location", "imageUrl", "gstNumber", "invoiceText", "storeCode", "printerId", "disable"];
-    const rows = displayed.map((s) =>
-      [
-        escapeCSV(s.docId ?? ""),
-        escapeCSV(s.name ?? ""),
-        escapeCSV(s.address ?? ""),
-        escapeCSV(s.email ?? ""),
-        escapeCSV(s.contactNumber ?? ""),
-        escapeCSV(s.location ?? ""),
-        escapeCSV(s.imageUrl ?? ""),
-        escapeCSV(s.gstNumber ?? ""),
-        escapeCSV(s.invoiceText ?? ""),
-        escapeCSV(s.storeCode ?? ""),
-        escapeCSV(s.printerId ?? ""),
-        String(s.disable ?? false),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `stores-${new Date().toISOString().slice(0, 10)}.csv`);
+    exportRowsToCSV(displayed, STORE_EXPORTABLE_FIELDS, "stores");
   }
 
   function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
@@ -411,6 +398,7 @@ export default function StoresPage() {
         gstNumber: form.gstNumber.trim(),
         invoiceText: form.invoiceText.trim(),
         printerId: form.printerId.trim(),
+        storeCode: form.storeCode.trim(),
         openingHours,
         disable: false,
       });
@@ -724,6 +712,16 @@ export default function StoresPage() {
                     placeholder="UAT"
                   />
                   {errors.printerId && <p className="mt-1 text-xs text-error">Required.</p>}
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs text-light-grey">Store Code *</label>
+                  <input
+                    className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.storeCode ? "border-error" : "border-border"}`}
+                    value={form.storeCode}
+                    onChange={(e) => setField("storeCode", e.target.value)}
+                  />
+                  {errors.storeCode && <p className="mt-1 text-xs text-error">Required.</p>}
                 </div>
               </div>
 

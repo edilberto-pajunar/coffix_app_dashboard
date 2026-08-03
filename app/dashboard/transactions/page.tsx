@@ -6,7 +6,8 @@ import { useTransactionStore } from "./store/useTransactionStore";
 import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
 import { Transaction, PaymentMethod } from "./interface/transaction";
 import { formatDateTime } from "@/app/utils/formatting";
-import { escapeCSV, tsToISO, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { TRANSACTION_EXPORTABLE_FIELDS } from "./constants/transactionFieldConstants";
+import { exportRowsToCSV } from "@/app/utils/import";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/app/lib/AuthContext";
@@ -15,9 +16,12 @@ import { TransactionService } from "./service/TransactionService";
 import { TransactionsFilterBar } from "./components/TransactionsFilterBar";
 import { AddTransactionDialog } from "./components/AddTransactionDialog";
 import { EnumChip } from "@/components/ui/StatusChip";
+import { Pagination } from "@/components/ui/pagination";
 
 type DateRange = { from: string; to: string };
 type NumberRange = { min: string; max: string };
+
+const PAGE_SIZE = 50;
 
 function dateInRange(value: Date | undefined, from: string, to: string): boolean {
   if (!from && !to) return true;
@@ -59,6 +63,7 @@ export default function TransactionsPage() {
   const [filterTotalAmount, setFilterTotalAmount] = useState<NumberRange>({ min: "", max: "" });
   const [filterRecipientEmail, setFilterRecipientEmail] = useState("");
   const [filterRecipientFullName, setFilterRecipientFullName] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     setSelected(new Set());
@@ -93,14 +98,16 @@ export default function TransactionsPage() {
     setSelected(new Set());
   }
 
+  // Acts on the visible page only, so selections made on other pages survive.
   function toggleSelectAll() {
-    const allIds = displayed.map((tx) => tx.docId).filter((id): id is string => !!id);
-    const allSelected = allIds.every((id) => selected.has(id));
-    if (allSelected) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(allIds));
-    }
+    const pageIds = paginated.map((tx) => tx.docId).filter((id): id is string => !!id);
+    const allSelected = pageIds.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
   }
 
   function toggleRow(docId: string) {
@@ -214,39 +221,26 @@ export default function TransactionsPage() {
       filterStatus, filterCreatedAt, filterAmount, filterTotalAmount,
       filterRecipientEmail, filterRecipientFullName]);
 
-  const selectedCount = displayed.filter((tx) => tx.docId && selected.has(tx.docId)).length;
+  // Filtering can shrink the results out from under the selected page, so clamp
+  // during render rather than correcting it afterwards in an effect.
+  const pageCount = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, pageCount);
+
+  const paginated = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return displayed.slice(start, start + PAGE_SIZE);
+  }, [displayed, safePage]);
+
+  const selectedCount = paginated.filter((tx) => tx.docId && selected.has(tx.docId)).length;
   const allDisplayedSelected =
-    displayed.length > 0 && displayed.every((tx) => !tx.docId || selected.has(tx.docId));
+    paginated.length > 0 && paginated.every((tx) => !tx.docId || selected.has(tx.docId));
   const someDisplayedSelected = selectedCount > 0 && !allDisplayedSelected;
 
   const sortIndicator = (key: SortKey) =>
     sortKey === key ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>;
 
   function exportToCSV() {
-    const paymentLabels: Record<PaymentMethod, string> = {
-      coffixCredit: "Coffix Credit",
-      card: "Credit Card",
-      wallet: "Wallet",
-      cash: "Cash",
-    };
-    const headers = ["transactionNumber", "createdAt", "paymentMethod", "type", "customerId", "amount", "status", "orderId", "gst", "gstAmount", "totalAmount", "recipientEmail"];
-    const rows = displayed.map((tx) =>
-      [
-        escapeCSV(tx.transactionNumber ?? ""),
-        escapeCSV(formatDateTime(tx.createdAt)),
-        escapeCSV(tx.paymentMethod ? paymentLabels[tx.paymentMethod] : ""),
-        escapeCSV(tx.type ?? ""),
-        escapeCSV(getCustomerEmail(tx)),
-        String(tx.amount ?? ""),
-        escapeCSV(tx.status ?? ""),
-        escapeCSV(tx.orderId ?? ""),
-        String(tx.gst ?? ""),
-        String(tx.gstAmount ?? ""),
-        String(tx.totalAmount ?? ""),
-        escapeCSV(tx.recipientEmail ?? ""),
-      ].join(",")
-    );
-    triggerCSVDownload([headers.join(","), ...rows].join("\n"), `transactions-${new Date().toISOString().slice(0, 10)}.csv`);
+    exportRowsToCSV(displayed, TRANSACTION_EXPORTABLE_FIELDS, "transactions");
   }
 
   return (
@@ -260,7 +254,7 @@ export default function TransactionsPage() {
         </div>
         <div className="flex items-center gap-2">
           {selected.size > 0 && (
-            <Button size="sm" variant="outline" onClick={sendInvoices} disabled={invoicing}>
+            <Button variant="outline" onClick={sendInvoices} disabled={invoicing}>
               {invoicing ? "Sending…" : `Send Invoice (${selected.size})`}
             </Button>
           )}
@@ -325,7 +319,7 @@ export default function TransactionsPage() {
                 </td>
               </tr>
             ) : (
-              displayed.map((tx) => (
+              paginated.map((tx) => (
                 <tr
                   key={tx.docId}
                   onClick={() => router.push(`/dashboard/transactions/${tx.docId}`)}
@@ -361,6 +355,14 @@ export default function TransactionsPage() {
             )}
           </tbody>
         </table>
+
+        <Pagination
+          currentPage={safePage}
+          totalItems={displayed.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          className="border-t border-border"
+        />
       </div>
 
       <AddTransactionDialog open={addOpen} onClose={() => setAddOpen(false)} />

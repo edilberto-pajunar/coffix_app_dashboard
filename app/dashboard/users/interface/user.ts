@@ -10,7 +10,6 @@ export interface AppUser {
   suburb?: string;
   city?: string;
   preferredStoreId?: string;
-  preferredStoreName?: string;
   createdAt?: Date;
   emailVerified?: boolean;
   lastLogin?: Date;
