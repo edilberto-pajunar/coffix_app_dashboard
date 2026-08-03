@@ -2,7 +2,7 @@ import { EmailVariableGroup } from "../dashboard/emailTemplates/constants/emailV
 
 const COLLECTION_GLOBAL_SETTINGS = "EQ0i4V6H47Ra7yMCdG7B";
 export const GLOBAL_COLLECTION_LOG_ID = "VmvT6HFpSMe6pC8AyyeR";
-const WEBAPP_VERSION = "1.0.0+61";
+const WEBAPP_VERSION = "1.0.0+62";
 
 // Prefixes for human-readable sequential document IDs (see app/utils/generateId.ts).
 // Extend as other collections adopt the helper.
