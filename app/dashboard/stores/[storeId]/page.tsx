@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { useStoreStore } from "../store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
-import { isStoreOpenAt, DayHours, HolidayHours, Store, parseLocation, formatLocation, isValidCoordinate } from "../interface/store";
+import { isStoreOpenAt, DayHours, HolidayHours, Store, parseLocation, formatLocation, isValidCoordinate, isStoreFieldTaken } from "../interface/store";
 import { StoreService } from "../service/StoreService";
 import { formatTime } from "@/app/utils/formatting";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,9 @@ const REQUIRED: (keyof Omit<StoreEditForm, "openingHours">)[] = [
   "name", "email", "contactNumber", "address", "printerId",
   "gstNumber", "invoiceText", "storeCode",
 ];
+
+/** Per-field error message; absent means no error. */
+type FieldErrors = Partial<Record<keyof StoreEditForm, string>>;
 
 type DialogMode = "edit-store" | "edit-hours" | "add-holiday" | "edit-holiday" | "delete-holiday" | "delete-store" | null;
 
@@ -104,7 +107,7 @@ export default function StoreDetailPage() {
 
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [form, setForm] = useState<StoreEditForm | null>(null);
-  const [errors, setErrors] = useState<Partial<Record<keyof StoreEditForm, boolean>>>({});
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
 
   const [holidayForm, setHolidayForm] = useState<HolidayForm>(emptyHolidayForm);
@@ -290,7 +293,7 @@ export default function StoreDetailPage() {
 
   function setField<K extends keyof Omit<StoreEditForm, "openingHours">>(key: K, value: string) {
     setForm((f) => f ? { ...f, [key]: value } : f);
-    setErrors((e) => ({ ...e, [key]: false }));
+    setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
   function setDayHours(day: Day, patch: Partial<DayHoursForm>) {
@@ -304,22 +307,41 @@ export default function StoreDetailPage() {
     if (!form || !store) return;
 
     const newErrors = Object.fromEntries(
-      REQUIRED.map((k) => [k, !(form[k] as string).trim()]),
-    ) as Partial<Record<keyof StoreEditForm, boolean>>;
+      REQUIRED.filter((k) => !(form[k] as string).trim()).map((k) => [k, "Required."]),
+    ) as FieldErrors;
 
-    if (Object.values(newErrors).some(Boolean)) {
+    if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    // Exclude this store so unchanged values don't collide with themselves.
+    const dupErrors: FieldErrors = {};
+    if (isStoreFieldTaken(stores, "storeCode", form.storeCode, store.docId)) {
+      dupErrors.storeCode = "This store code is already in use.";
+    }
+    if (isStoreFieldTaken(stores, "printerId", form.printerId, store.docId)) {
+      dupErrors.printerId = "This printer ID is already in use.";
+    }
+    if (Object.keys(dupErrors).length > 0) {
+      setErrors(dupErrors);
+      toast.error("Store code and printer ID must be unique.");
       return;
     }
 
     const latInvalid = !isValidCoordinate(form.lat, 90);
     const lngInvalid = !isValidCoordinate(form.lng, 180);
     if (latInvalid || lngInvalid) {
-      setErrors({ ...newErrors, lat: latInvalid, lng: lngInvalid });
+      setErrors({
+        ...(latInvalid ? { lat: "Enter a number between -90 and 90." } : {}),
+        ...(lngInvalid ? { lng: "Enter a number between -180 and 180." } : {}),
+      });
       toast.error("Please enter a valid latitude and longitude.");
       return;
     }
+
+    setErrors({});
 
     const openingHours: Record<string, DayHours> = Object.fromEntries(
       DAYS.map((day) => {
@@ -583,7 +605,7 @@ export default function StoreDetailPage() {
                     value={form.name}
                     onChange={(e) => setField("name", e.target.value)}
                   />
-                  {errors.name && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.name && <p className="mt-1 text-xs text-error">{errors.name}</p>}
                 </div>
 
                 <div className="col-span-2">
@@ -603,7 +625,7 @@ export default function StoreDetailPage() {
                     value={form.email}
                     onChange={(e) => setField("email", e.target.value)}
                   />
-                  {errors.email && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.email && <p className="mt-1 text-xs text-error">{errors.email}</p>}
                 </div>
 
                 <div>
@@ -614,7 +636,7 @@ export default function StoreDetailPage() {
                     value={form.contactNumber}
                     onChange={(e) => setField("contactNumber", e.target.value)}
                   />
-                  {errors.contactNumber && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.contactNumber && <p className="mt-1 text-xs text-error">{errors.contactNumber}</p>}
                 </div>
 
                 <div className="col-span-2 grid grid-cols-2 gap-3">
@@ -626,7 +648,7 @@ export default function StoreDetailPage() {
                       value={form.lat}
                       onChange={(e) => setField("lat", e.target.value)}
                     />
-                    {errors.lat && <p className="mt-1 text-xs text-error">Enter a number between -90 and 90.</p>}
+                    {errors.lat && <p className="mt-1 text-xs text-error">{errors.lat}</p>}
                   </div>
 
                   <div>
@@ -637,7 +659,7 @@ export default function StoreDetailPage() {
                       value={form.lng}
                       onChange={(e) => setField("lng", e.target.value)}
                     />
-                    {errors.lng && <p className="mt-1 text-xs text-error">Enter a number between -180 and 180.</p>}
+                    {errors.lng && <p className="mt-1 text-xs text-error">{errors.lng}</p>}
                   </div>
                 </div>
 
@@ -648,7 +670,7 @@ export default function StoreDetailPage() {
                     value={form.address}
                     onChange={(e) => setField("address", e.target.value)}
                   />
-                  {errors.address && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.address && <p className="mt-1 text-xs text-error">{errors.address}</p>}
                 </div>
 
                 <div className="col-span-2">
@@ -667,7 +689,7 @@ export default function StoreDetailPage() {
                     value={form.gstNumber}
                     onChange={(e) => setField("gstNumber", e.target.value)}
                   />
-                  {errors.gstNumber && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.gstNumber && <p className="mt-1 text-xs text-error">{errors.gstNumber}</p>}
                 </div>
 
                 <div>
@@ -677,7 +699,7 @@ export default function StoreDetailPage() {
                     value={form.invoiceText}
                     onChange={(e) => setField("invoiceText", e.target.value)}
                   />
-                  {errors.invoiceText && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.invoiceText && <p className="mt-1 text-xs text-error">{errors.invoiceText}</p>}
                 </div>
 
                 <div>
@@ -687,7 +709,7 @@ export default function StoreDetailPage() {
                     value={form.printerId}
                     onChange={(e) => setField("printerId", e.target.value)}
                   />
-                  {errors.printerId && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.printerId && <p className="mt-1 text-xs text-error">{errors.printerId}</p>}
                 </div>
 
                 <div>
@@ -697,7 +719,7 @@ export default function StoreDetailPage() {
                     value={form.storeCode}
                     onChange={(e) => setField("storeCode", e.target.value)}
                   />
-                  {errors.storeCode && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.storeCode && <p className="mt-1 text-xs text-error">{errors.storeCode}</p>}
                 </div>
               </div>
 

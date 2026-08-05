@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { useStoreStore } from "./store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
-import { isStoreOpenAt, DayHours, Store, formatLocation, isValidCoordinate } from "./interface/store";
+import { isStoreOpenAt, DayHours, Store, formatLocation, isValidCoordinate, isStoreFieldTaken } from "./interface/store";
 import { StoreService } from "./service/StoreService";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
 import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
@@ -78,6 +78,9 @@ const REQUIRED: (keyof Omit<StoreForm, "openingHours">)[] = [
   "name", "email", "contactNumber", "address", "printerId",
   "gstNumber", "invoiceText", "storeCode",
 ];
+
+/** Per-field error message; absent means no error. */
+type FieldErrors = Partial<Record<keyof StoreForm, string>>;
 
 export default function StoresPage() {
   const allStores = useStoreStore((s) => s.stores);
@@ -183,7 +186,7 @@ export default function StoresPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<StoreForm>(emptyForm);
-  const [errors, setErrors] = useState<Partial<Record<keyof StoreForm, boolean>>>({});
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
 
   type ImportError = { row: number; field: string; reason: string };
@@ -195,7 +198,7 @@ export default function StoresPage() {
 
   function setField<K extends keyof Omit<StoreForm, "openingHours">>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
-    setErrors((e) => ({ ...e, [key]: false }));
+    setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
   function setDayHours(day: Day, patch: Partial<DayHoursForm>) {
@@ -236,11 +239,19 @@ export default function StoresPage() {
           return;
         }
 
-        const existingStoreIds = useStoreStore.getState().stores.map((s) => s.docId);
+        const existingStores = useStoreStore.getState().stores;
+        const existingStoreIds = existingStores.map((s) => s.docId);
         const validImportCols = new Set([...(STORE_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
 
         const validRows: Record<string, string>[] = [];
         const errors: ImportError[] = [];
+
+        // Values claimed by earlier rows in this file, so the import can't
+        // introduce duplicates among its own rows either.
+        const claimed: Record<"storeCode" | "printerId", Map<string, number>> = {
+          storeCode: new Map(),
+          printerId: new Map(),
+        };
 
         rows.forEach((cols, idx) => {
           const rowNum = idx + 2;
@@ -266,6 +277,31 @@ export default function StoresPage() {
             errors.push({ row: rowNum, field: "disable", reason: 'Must be "true" or "false"' });
             hasError = true;
           }
+
+          // Store code and printer ID must stay unique across all stores, and
+          // across the file itself. The row's own store is excluded by docId.
+          ([
+            ["storeCode", "Store code"],
+            ["printerId", "Printer ID"],
+          ] as const).forEach(([field, label]) => {
+            const raw = row[field];
+            if (raw === undefined || raw.trim() === "") return;
+            const key = raw.trim().toLowerCase();
+
+            if (isStoreFieldTaken(existingStores, field, raw, row.docId)) {
+              errors.push({ row: rowNum, field, reason: `${label} "${raw}" already exists` });
+              hasError = true;
+              return;
+            }
+
+            const claimedBy = claimed[field].get(key);
+            if (claimedBy !== undefined) {
+              errors.push({ row: rowNum, field, reason: `${label} "${raw}" duplicates row ${claimedBy}` });
+              hasError = true;
+              return;
+            }
+            claimed[field].set(key, rowNum);
+          });
 
           if (!hasError) validRows.push(row);
         });
@@ -360,19 +396,37 @@ export default function StoresPage() {
 
   async function handleCreate() {
     const newErrors = Object.fromEntries(
-      REQUIRED.map((k) => [k, !(form[k] as string).trim()]),
-    ) as Partial<Record<keyof StoreForm, boolean>>;
+      REQUIRED.filter((k) => !(form[k] as string).trim()).map((k) => [k, "Required."]),
+    ) as FieldErrors;
 
-    if (Object.values(newErrors).some(Boolean)) {
+    if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    // Validate against every store, not the role-filtered list — a store manager
+    // sees only their assigned stores and would miss collisions outside that scope.
+    const dupErrors: FieldErrors = {};
+    if (isStoreFieldTaken(allStores, "storeCode", form.storeCode)) {
+      dupErrors.storeCode = "This store code is already in use.";
+    }
+    if (isStoreFieldTaken(allStores, "printerId", form.printerId)) {
+      dupErrors.printerId = "This printer ID is already in use.";
+    }
+    if (Object.keys(dupErrors).length > 0) {
+      setErrors(dupErrors);
+      toast.error("Store code and printer ID must be unique.");
       return;
     }
 
     const latInvalid = !isValidCoordinate(form.lat, 90);
     const lngInvalid = !isValidCoordinate(form.lng, 180);
     if (latInvalid || lngInvalid) {
-      setErrors({ ...newErrors, lat: latInvalid, lng: lngInvalid });
+      setErrors({
+        ...(latInvalid ? { lat: "Enter a number between -90 and 90." } : {}),
+        ...(lngInvalid ? { lng: "Enter a number between -180 and 180." } : {}),
+      });
       toast.error("Please enter a valid latitude and longitude.");
       return;
     }
@@ -606,7 +660,7 @@ export default function StoresPage() {
                     value={form.name}
                     onChange={(e) => setField("name", e.target.value)}
                   />
-                  {errors.name && <p className="mt-1 text-xs text-error">Name is required.</p>}
+                  {errors.name && <p className="mt-1 text-xs text-error">{errors.name}</p>}
                 </div>
 
                 <ImageUploadField
@@ -623,7 +677,7 @@ export default function StoresPage() {
                     value={form.email}
                     onChange={(e) => setField("email", e.target.value)}
                   />
-                  {errors.email && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.email && <p className="mt-1 text-xs text-error">{errors.email}</p>}
                 </div>
 
                 <div>
@@ -635,7 +689,7 @@ export default function StoresPage() {
                     value={form.contactNumber}
                     onChange={(e) => setField("contactNumber", e.target.value)}
                   />
-                  {errors.contactNumber && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.contactNumber && <p className="mt-1 text-xs text-error">{errors.contactNumber}</p>}
                 </div>
 
                 <div className="col-span-2 grid grid-cols-2 gap-3">
@@ -647,7 +701,7 @@ export default function StoresPage() {
                       value={form.lat}
                       onChange={(e) => setField("lat", e.target.value)}
                     />
-                    {errors.lat && <p className="mt-1 text-xs text-error">Enter a number between -90 and 90.</p>}
+                    {errors.lat && <p className="mt-1 text-xs text-error">{errors.lat}</p>}
                   </div>
 
                   <div>
@@ -658,7 +712,7 @@ export default function StoresPage() {
                       value={form.lng}
                       onChange={(e) => setField("lng", e.target.value)}
                     />
-                    {errors.lng && <p className="mt-1 text-xs text-error">Enter a number between -180 and 180.</p>}
+                    {errors.lng && <p className="mt-1 text-xs text-error">{errors.lng}</p>}
                   </div>
                 </div>
 
@@ -670,7 +724,7 @@ export default function StoresPage() {
                     value={form.address}
                     onChange={(e) => setField("address", e.target.value)}
                   />
-                  {errors.address && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.address && <p className="mt-1 text-xs text-error">{errors.address}</p>}
                 </div>
 
                 <div className="col-span-2">
@@ -690,7 +744,7 @@ export default function StoresPage() {
                     value={form.gstNumber}
                     onChange={(e) => setField("gstNumber", e.target.value)}
                   />
-                  {errors.gstNumber && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.gstNumber && <p className="mt-1 text-xs text-error">{errors.gstNumber}</p>}
                 </div>
 
                 <div>
@@ -700,7 +754,7 @@ export default function StoresPage() {
                     value={form.invoiceText}
                     onChange={(e) => setField("invoiceText", e.target.value)}
                   />
-                  {errors.invoiceText && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.invoiceText && <p className="mt-1 text-xs text-error">{errors.invoiceText}</p>}
                 </div>
 
                 <div>
@@ -711,7 +765,7 @@ export default function StoresPage() {
                     onChange={(e) => setField("printerId", e.target.value)}
                     placeholder="UAT"
                   />
-                  {errors.printerId && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.printerId && <p className="mt-1 text-xs text-error">{errors.printerId}</p>}
                 </div>
 
                 <div>
@@ -721,7 +775,7 @@ export default function StoresPage() {
                     value={form.storeCode}
                     onChange={(e) => setField("storeCode", e.target.value)}
                   />
-                  {errors.storeCode && <p className="mt-1 text-xs text-error">Required.</p>}
+                  {errors.storeCode && <p className="mt-1 text-xs text-error">{errors.storeCode}</p>}
                 </div>
               </div>
 

@@ -12,8 +12,10 @@ import { exportCollection, importCollection, ImportError } from "./service/Backe
 const COLLECTIONS: CollectionKey[] = COLLECTION_KEYS;
 
 interface ImportSummary {
+  received: number;
   created: number;
   updated: number;
+  skipped: number;
   errors: ImportError[];
 }
 
@@ -319,6 +321,9 @@ export default function ImportPage() {
           <ul className="text-sm text-green-700 space-y-0.5">
             <li>{summary.created} document(s) created</li>
             <li>{summary.updated} document(s) updated</li>
+            {summary.skipped > 0 && (
+              <li className="text-amber-600">{summary.skipped} row(s) skipped</li>
+            )}
             {summary.errors.length > 0 && (
               <li className="text-red-600">{summary.errors.length} row(s) failed</li>
             )}

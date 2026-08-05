@@ -7,9 +7,40 @@ export interface ImportError {
 }
 
 export interface ImportResult {
+  received: number;
   created: number;
   updated: number;
+  skipped: number;
   errors: ImportError[];
+}
+
+/**
+ * The backend reports skipped rows either as a plain count or, on older
+ * responses, as an array of per-row failures. Only the array form carries
+ * anything worth showing as an error.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toImportErrors(payload: any): ImportError[] {
+  const source = Array.isArray(payload?.errors)
+    ? payload.errors
+    : Array.isArray(payload?.skipped)
+      ? payload.skipped
+      : null;
+
+  if (!source) return [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return source.map((entry: any) => {
+    if (entry && typeof entry === "object") {
+      return {
+        docId: typeof entry.docId === "string" ? entry.docId : undefined,
+        row: typeof entry.row === "number" ? entry.row : undefined,
+        message:
+          entry.message ?? entry.error ?? entry.reason ?? JSON.stringify(entry),
+      };
+    }
+    return { message: String(entry) };
+  });
 }
 
 function triggerDownload(
@@ -86,15 +117,22 @@ export async function importCollection(
 
   const json = await res.json().catch(() => null);
 
-  if (!res.ok) {
+  // A handled failure comes back as HTTP 200 with `success: false`, so the
+  // status alone is not enough to tell a successful import from a rejected one.
+  if (!res.ok || json?.success === false) {
     const message =
       (json && (json.error || json.message)) || `Import failed (${res.status})`;
     throw new Error(message);
   }
 
+  // Counts are nested under `data`; fall back to the root for a flat response.
+  const payload = json?.data ?? json ?? {};
+
   return {
-    created: json?.created ?? 0,
-    updated: json?.updated ?? 0,
-    errors: Array.isArray(json?.errors) ? json.errors : [],
+    received: payload.received ?? 0,
+    created: payload.created ?? 0,
+    updated: payload.updated ?? 0,
+    skipped: typeof payload.skipped === "number" ? payload.skipped : 0,
+    errors: toImportErrors(payload),
   };
 }

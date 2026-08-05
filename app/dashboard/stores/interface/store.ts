@@ -52,6 +52,24 @@ export function isValidCoordinate(value: string, limit: 90 | 180): boolean {
   return Number.isFinite(n) && Math.abs(n) <= limit;
 }
 
+/**
+ * True when another store already uses this storeCode/printerId.
+ * Matching is case-insensitive and ignores surrounding whitespace.
+ * Pass `excludeDocId` when editing so a store doesn't collide with itself.
+ */
+export function isStoreFieldTaken(
+  stores: Store[],
+  field: "storeCode" | "printerId",
+  value: string,
+  excludeDocId?: string,
+): boolean {
+  const target = value.trim().toLowerCase();
+  if (target === "") return false;
+  return stores.some(
+    (s) => s.docId !== excludeDocId && (s[field] ?? "").trim().toLowerCase() === target,
+  );
+}
+
 export function isStoreOpenAt(store: Store, dt: Date = new Date()): boolean {
   const hours = effectiveHoursFor(store, dt);
   if (!hours || hours.isOpen === false) return false;
