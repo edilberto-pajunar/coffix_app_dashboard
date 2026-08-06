@@ -46,6 +46,7 @@ function InfoCard({ title, rows }: { title: string; rows: { label: string; value
 type CouponEditForm = {
   type: string;
   amount: string;
+  remainingAmount: string;
   expiryDate: string;
   notes: string;
   storeId: string;
@@ -79,6 +80,7 @@ export default function CouponDetailPage() {
     setForm({
       type: ["referral", "admin"].includes(coupon!.type ?? "") ? coupon!.type! : "referral",
       amount: (coupon!.amount ?? "").toString(),
+      remainingAmount: (coupon!.remainingAmount ?? coupon!.amount ?? 0).toString(),
       expiryDate: formatDate(coupon!.expiryDate),
       notes: coupon!.notes ?? "",
       storeId: coupon!.storeId ?? "",
@@ -103,6 +105,8 @@ export default function CouponDetailPage() {
       if (form.type.trim()) data.type = form.type.trim();
       const amount = parseFloat(form.amount);
       if (!isNaN(amount) && amount >= 0) data.amount = amount;
+      const remainingAmount = parseFloat(form.remainingAmount);
+      if (!isNaN(remainingAmount) && remainingAmount >= 0) data.remainingAmount = remainingAmount;
       if (form.expiryDate) {
         const d = new Date(form.expiryDate + "T00:00:00");
         if (!isNaN(d.getTime())) data.expiryDate = d;
@@ -149,6 +153,7 @@ export default function CouponDetailPage() {
           rows={[
             { label: "Type", value: coupon.type ?? "—" },
             { label: "Amount", value: `$${(coupon.amount ?? 0).toFixed(2)}` },
+            { label: "Remaining", value: `$${(coupon.remainingAmount ?? coupon.amount ?? 0).toFixed(2)}` },
             { label: "Expiry Date", value: formatDateTime(coupon.expiryDate) },
           ]}
         />
@@ -212,6 +217,17 @@ export default function CouponDetailPage() {
                     className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
                     value={form.amount}
                     onChange={(e) => setField("amount", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs text-light-grey">Remaining Amount ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                    value={form.remainingAmount}
+                    onChange={(e) => setField("remainingAmount", e.target.value)}
                   />
                 </div>
                 <div>

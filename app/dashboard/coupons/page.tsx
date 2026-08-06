@@ -475,6 +475,7 @@ export default function CouponsPage() {
               >
                 Amount {sortKey === "amount" ? (sortDir === "asc" ? "↑" : "↓") : <span className="opacity-30">↕</span>}
               </th>
+              <th className="px-5 py-3 text-right font-medium text-light-grey">Remaining</th>
               <th
                 onClick={() => toggleSort("expiryDate")}
                 className="cursor-pointer select-none px-5 py-3 text-left font-medium text-light-grey hover:text-black"
@@ -521,8 +522,11 @@ export default function CouponsPage() {
                     <td className="px-5 py-3 text-right text-black">
                       ${(coupon.amount ?? 0).toFixed(2)}
                     </td>
+                    <td className="px-5 py-3 text-right text-black">
+                      ${(coupon.remainingAmount ?? coupon.amount ?? 0).toFixed(2)}
+                    </td>
                     <td className="px-5 py-3 text-black">{formatDateTime(coupon.expiryDate)}</td>
-                    <td className="max-w-[200px] truncate px-5 py-3 text-black" title={coupon.notes ?? ""}>
+                    <td className="max-w-50 truncate px-5 py-3 text-black" title={coupon.notes ?? ""}>
                       {coupon.notes ?? "—"}
                     </td>
                     <td className="px-5 py-3 text-black">{formatDateTime(coupon.createdAt)}</td>

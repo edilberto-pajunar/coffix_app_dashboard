@@ -7,6 +7,7 @@ import { useUserStore } from "./store/useUserStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 import { deletedRefReason } from "@/components/import/storeRefs";
 import { useTransactionStore } from "@/app/dashboard/transactions/store/useTransactionStore";
+import { useCouponStore } from "@/app/dashboard/coupons/store/useCouponStore";
 import { accumulateCoffixCredit, reconcileCoffixCredit, COFFIX_CREDIT_SIGN } from "@/app/utils/coffixCredit";
 import { UserService } from "./service/UserService";
 import { AppUser } from "./interface/user";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Pagination } from "@/components/ui/pagination";
 import { UsersFilterBar } from "./components/UsersFilterBar";
 import { AddCouponDialog } from "@/app/dashboard/coupons/components/AddCouponDialog";
 import BulkUpdateFlagsDialog, { type FlagKey } from "./components/BulkUpdateFlagsDialog";
@@ -95,6 +97,8 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+const PAGE_SIZE = 50;
+
 const FLAG_KEYS: FlagKey[] = [
   "getPurchaseInfoByMail", "getPromotions", "allowWinACoffee",
   "disabled", "scheduleOrder", "shareCredit", "withdrawBalance", "coffixCreditAvailable",
@@ -104,7 +108,13 @@ export default function UsersPage() {
   const users = useUserStore((s) => s.users);
   const stores = useStoreStore((s) => s.stores);
   const transactions = useTransactionStore((s) => s.transactions);
+  const coupons = useCouponStore((s) => s.coupons);
   const router = useRouter();
+
+  const couponsById = useMemo(
+    () => new Map(coupons.filter((c) => c.docId).map((c) => [c.docId!, c])),
+    [coupons]
+  );
 
   // Re-derive each user's coffix credit from their coffixCredit transactions once,
   // so rows don't each re-scan the full transaction list.
@@ -118,10 +128,10 @@ export default function UsersPage() {
     }
     const map = new Map<string, number>();
     for (const id of userIds) {
-      map.set(id, accumulateCoffixCredit(transactions, id));
+      map.set(id, accumulateCoffixCredit(transactions, id, couponsById));
     }
     return map;
-  }, [transactions]);
+  }, [transactions, couponsById]);
 
   type BoolFilter = "Any" | "Yes" | "No";
   type DateRange = { from: string; to: string };
@@ -154,6 +164,7 @@ export default function UsersPage() {
 
   const { log } = useActivityLog();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
   const [showAddCredits, setShowAddCredits] = useState(false);
   const [showAddCoupon, setShowAddCoupon] = useState(false);
   const [showBulkFlags, setShowBulkFlags] = useState(false);
@@ -297,6 +308,16 @@ export default function UsersPage() {
     filterBirthMonth,
   ]);
 
+  // Filtering can shrink the results out from under the selected page, so clamp
+  // during render rather than correcting it afterwards in an effect.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, pageCount);
+
+  const paginated = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
+
   const bulkInitialFlags = useMemo(() => {
     const selected = Array.from(selectedIds)
       .map((id) => users.find((u) => u.docId === id))
@@ -310,15 +331,20 @@ export default function UsersPage() {
     return result;
   }, [selectedIds, users]);
 
-  const allSelected = filtered.length > 0 && filtered.every((u) => selectedIds.has(u.docId!));
-  const someSelected = !allSelected && filtered.some((u) => selectedIds.has(u.docId!));
+  // Scoped to the visible page so the header checkbox always reflects the rows
+  // on screen. Selections themselves still persist across pages.
+  const allSelected = paginated.length > 0 && paginated.every((u) => selectedIds.has(u.docId!));
+  const someSelected = !allSelected && paginated.some((u) => selectedIds.has(u.docId!));
 
   function toggleSelectAll() {
-    if (allSelected) {
-      clearSelection();
-    } else {
-      setSelectedIds(new Set(filtered.map((u) => u.docId!)));
-    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const u of paginated) {
+        if (allSelected) next.delete(u.docId!);
+        else next.add(u.docId!);
+      }
+      return next;
+    });
   }
 
   function toggleUser(docId: string) {
@@ -630,7 +656,7 @@ export default function UsersPage() {
                 </td>
               </tr>
             ) : (
-              filtered.map((user) => {
+              paginated.map((user) => {
                 const displayName = getDisplayName(user);
                 const initials = getInitials(displayName);
                 const isSelected = selectedIds.has(user.docId!);
@@ -682,6 +708,14 @@ export default function UsersPage() {
           </tbody>
         </table>
         </div>
+
+        <Pagination
+          currentPage={safePage}
+          totalItems={filtered.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          className="border-t border-border"
+        />
       </div>
 
       <Dialog open={showAddCredits} onOpenChange={(open) => { if (!open) { setShowAddCredits(false); setCreditAmount(""); } }}>

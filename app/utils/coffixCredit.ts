@@ -1,4 +1,5 @@
 import { Transaction } from "@/app/dashboard/transactions/interface/transaction";
+import { Coupon } from "@/app/dashboard/coupons/interface/coupon";
 
 /**
  * Coffix credit reconciliation utilities.
@@ -29,12 +30,29 @@ export const COFFIX_CREDIT_SIGN: Record<string, 1 | -1> = {
   // Adds credit
   topup: 1,
   refund: 1,
-  referral: 1,
   credit: 1,
+  // coupon / referral ledger rows are intentionally omitted — they issue a
+  // coupon document, they do not change creditAvailable.
   // Subtracts credit
   order: -1,
   purchase: -1,
 };
+
+/**
+ * Statuses that mean the transaction never settled — e.g. a Windcave top-up
+ * session left in `created` after the user abandoned checkout. Counting these
+ * double-counts against a later `approved` top-up of the same amount.
+ * Missing/null status is treated as settled for legacy documents.
+ */
+const UNSETTLED_STATUSES = new Set([
+  "created",
+  "pending",
+  "failed",
+  "declined",
+  "expired",
+  "payment_failed",
+  "processing",
+]);
 
 const EPSILON = 0.005; // half a cent — guards against float noise
 
@@ -46,21 +64,34 @@ function roundCents(value: number): number {
  * Signed contribution of a single transaction to `userId`'s coffix credit.
  * Returns 0 if the transaction's type is unknown or it doesn't affect this user.
  *
- * Spending magnitudes are net of `couponDiscount`: for `order`/`purchase` the
- * credit actually drawn is `amount − couponDiscount` (since `amount` is the full
+ * Spending magnitudes are net of the coupon(s) applied: for `order`/`purchase` the
+ * credit actually drawn is `amount − couponAmount` (since `amount` is the full
  * pre-coupon price), clamped at 0 so an oversized coupon can never add credit.
+ * The coupon amount is looked up via `tx.couponIds` against `couponsById` rather
+ * than trusting `tx.couponDiscount` directly, since that field is not reliably
+ * populated on transaction documents; `couponDiscount` is used only as a fallback
+ * when no linked coupons are found.
  */
-export function signedCoffixAmount(tx: Transaction, userId: string): number {
+export function signedCoffixAmount(
+  tx: Transaction,
+  userId: string,
+  couponsById: Map<string, Coupon>,
+): number {
   const sign = COFFIX_CREDIT_SIGN[tx.type ?? ""];
 
   // Spending (order/purchase) draws amount − coupon; credit-adds prefer
   // totalAmount (amount + bonus); gift falls through and uses amount.
   let rawAmount: number;
   if (sign === -1) {
-    const coupon = Math.abs(tx.couponDiscount ?? 0);
+    const couponTotal = (tx.couponIds ?? [])
+      .map((id) => couponsById.get(id)?.amount ?? 0)
+      .reduce((a, b) => a + b, 0);
+    const coupon =
+      couponTotal > 0 ? couponTotal : Math.abs(tx.couponDiscount ?? 0);
     rawAmount = Math.max(0, Math.abs(tx.amount ?? 0) - coupon);
   } else {
-    rawAmount = sign === 1 ? (tx.totalAmount ?? tx.amount ?? 0) : (tx.amount ?? 0);
+    rawAmount =
+      sign === 1 ? (tx.totalAmount ?? tx.amount ?? 0) : (tx.amount ?? 0);
   }
   const magnitude = Math.abs(rawAmount);
   if (magnitude === 0) return 0;
@@ -83,7 +114,7 @@ export function signedCoffixAmount(tx: Transaction, userId: string): number {
  * have actually moved through coffix credit. A cash/card refund or topup does
  * not touch the coffix balance and is ignored here. Credit-adds use `totalAmount`
  * when available (which includes any topup bonus), falling back to `amount`;
- * spending is netted against `couponDiscount` (see signedCoffixAmount).
+ * spending is netted against the linked coupons' amount (see signedCoffixAmount).
  * `topup` and `gift` are exempt from the payment-method gate — a top-up always
  * credits the coffix balance regardless of how it was paid (card/cash), and
  * `gift` is an inherent coffix-credit transfer handled separately in
@@ -91,11 +122,13 @@ export function signedCoffixAmount(tx: Transaction, userId: string): number {
  */
 export function accumulateCoffixCredit(
   transactions: Transaction[],
-  userId: string
+  userId: string,
+  couponsById: Map<string, Coupon>,
 ): number {
   let total = 0;
   for (const tx of transactions) {
     if (tx.customerId !== userId && tx.recipientCustomerId !== userId) continue;
+    if (tx.status && UNSETTLED_STATUSES.has(tx.status)) continue;
     const type = tx.type ?? "";
     // coffix-credit adds AND spends only count when the money actually moved
     // through coffix credit — a cash/card refund must NOT change the accumulated
@@ -106,8 +139,9 @@ export function accumulateCoffixCredit(
       type !== "topup" &&
       COFFIX_CREDIT_SIGN[type] &&
       tx.paymentMethod !== "coffixCredit"
-    ) continue;
-    total += signedCoffixAmount(tx, userId);
+    )
+      continue;
+    total += signedCoffixAmount(tx, userId, couponsById);
   }
   return roundCents(total);
 }
@@ -118,7 +152,7 @@ export function accumulateCoffixCredit(
  */
 export function reconcileCoffixCredit(
   current: number,
-  accumulated: number
+  accumulated: number,
 ): { matches: boolean; difference: number } {
   const difference = roundCents(current - accumulated);
   return { matches: Math.abs(difference) < EPSILON, difference };

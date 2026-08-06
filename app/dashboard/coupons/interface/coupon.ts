@@ -9,4 +9,5 @@ export interface Coupon {
   type?: string; // referral | admin
   userId?: string;
   updatedAt?: Date;
+  remainingAmount?: number;
 }

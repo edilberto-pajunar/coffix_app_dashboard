@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useReferralStore } from "../store/useReferralStore";
 import { useUserStore } from "@/app/dashboard/users/store/useUserStore";
 import { formatDateTime } from "@/app/utils/formatting";
+import { Button } from "@/components/ui/button";
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -57,12 +58,13 @@ export default function ReferralDetailPage() {
   if (!referral) {
     return (
       <div className="space-y-6">
-        <button
+        <Button
           onClick={() => router.push("/dashboard/referrals")}
-          className="text-sm text-black hover:text-primary"
+            variant="outline"
+            size="sm"
         >
           ← Back to Referrals
-        </button>
+        </Button>
         <p className="text-black">Referral not found.</p>
       </div>
     );
@@ -71,12 +73,13 @@ export default function ReferralDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <button
+          <Button
           onClick={() => router.push("/dashboard/referrals")}
-          className="text-sm text-black hover:text-primary"
+          variant="outline"
+          size="sm"
         >
           ← Back to Referrals
-        </button>
+        </Button>
       </div>
 
       <div className="flex items-center justify-between">

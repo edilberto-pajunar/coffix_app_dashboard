@@ -51,6 +51,20 @@ export function AddTransactionDialog({ open, onClose }: AddTransactionDialogProp
     return users.find((u) => u.email?.trim().toLowerCase() === target)?.docId;
   }
 
+  const matchedUser = users.find(
+    (u) => u.email?.trim().toLowerCase() === form.email.trim().toLowerCase()
+  );
+  const isCoffixDeduction =
+    form.transactionType === "order" && form.paymentMethod === "coffixCredit";
+  const amountNum = parseFloat(form.amount);
+  const currentCredit = matchedUser?.creditAvailable ?? 0;
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const resultingCredit =
+    isCoffixDeduction && isValidEmail && matchedUser && !isNaN(amountNum)
+      ? currentCredit - amountNum
+      : null;
+  const willGoNegative = resultingCredit !== null && resultingCredit < 0;
+
   async function handleCreate() {
     setEmailError("");
 
@@ -231,6 +245,13 @@ export function AddTransactionDialog({ open, onClose }: AddTransactionDialogProp
               value={form.amount}
               onChange={(e) => setField("amount", e.target.value)}
             />
+            {willGoNegative && (
+              <p className="mt-1 text-xs text-amber-600">
+                Warning: this will make the customer&apos;s Coffix Credit balance
+                negative (current: ${currentCredit.toFixed(2)}, after: $
+                {resultingCredit!.toFixed(2)}).
+              </p>
+            )}
           </div>
 
           <div>
