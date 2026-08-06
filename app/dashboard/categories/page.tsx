@@ -12,7 +12,6 @@ import {
   CATEGORY_REQUIRED_FIELDS,
   CATEGORY_EXPORTABLE_FIELDS,
 } from "./constants/categoryFieldConstants";
-import { parseCSVText } from "@/app/utils/csvUtils";
 import { exportRowsToCSV } from "@/app/utils/import";
 import {
   Dialog,
@@ -23,14 +22,18 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CategoriesFilterBar } from "./components/CategoriesFilterBar";
+import { useAuth } from "@/app/lib/AuthContext";
+import { ImportCsvDialog, firstExampleRecord } from "@/components/import/ImportCsvDialog";
+import { isFileError, parseImportFile } from "@/components/import/parseImportFile";
+import type { ImportError, ImportPreview } from "@/components/import/types";
+import { classifyDocIdTarget, validateDocIdFormat } from "@/components/import/storeRefs";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
 import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
-type ImportError = { row: number; field: string; reason: string };
-type ImportPreview = { validRows: Record<string, string>[]; errors: ImportError[] } | null;
-
 export default function CategoriesPage() {
   const categories = useDashboardStore((s) => s.categories);
+  const { currentStaff } = useAuth();
+  const isAdmin = currentStaff?.role === "admin";
   const { log } = useActivityLog();
 
   const [search, setSearch] = useState("");
@@ -65,7 +68,7 @@ export default function CategoriesPage() {
   const [categoryLoading, setCategoryLoading] = useState(false);
 
   const [importLoading, setImportLoading] = useState(false);
-  const [importPreview, setImportPreview] = useState<ImportPreview>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [showImportInfo, setShowImportInfo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -158,107 +161,96 @@ export default function CategoriesPage() {
     exportRowsToCSV(orderedCategories, CATEGORY_EXPORTABLE_FIELDS, "categories");
   }
 
-  function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target?.result as string;
-        const { headers, rows } = parseCSVText(text);
+  function validateCategoryRow(row: Record<string, string>, rowNum: number): ImportError[] {
+    const errors: ImportError[] = [];
+    const existing = useDashboardStore.getState().categories;
+    const existingCategoryIds = existing.map((c) => c.docId!);
+    const allCategoryIds = useDashboardStore.getState().allCategories.map((c) => c.docId!);
+    const existingCategoryNames = existing.map((c) => formatDocId(c.name ?? ""));
 
-        const protectedInFile = headers.filter((h) =>
-          (CATEGORY_PROTECTED_FIELDS as readonly string[]).includes(h)
-        );
-        if (protectedInFile.length > 0) {
-          toast.error(`CSV contains protected columns: ${protectedInFile.join(", ")}. Remove them and re-upload.`);
-          if (fileInputRef.current) fileInputRef.current.value = "";
-          return;
-        }
+    // Format first: a wrong-entity ID gets a message naming the right section, instead
+    // of the membership check's generic "not found". A soft-deleted target is not an
+    // error — the row restores it on write. Only an unknown ID fails.
+    const docIdFormatError = validateDocIdFormat(row.docId, "productCategories", rowNum);
+    if (docIdFormatError) {
+      errors.push(docIdFormatError);
+    } else if (
+      row.docId &&
+      classifyDocIdTarget(row.docId, existingCategoryIds, allCategoryIds) === "unknown"
+    ) {
+      errors.push({ row: rowNum, field: "docId", reason: "Category not found — cannot update" });
+    }
 
-        const existingCategoryIds = useDashboardStore.getState().categories.map((c) => c.docId!);
-        const existingCategoryNames = useDashboardStore.getState().categories.map((c) =>
-          formatDocId(c.name ?? "")
-        );
-        const validImportCols = new Set([...(CATEGORY_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
-
-        const validRows: Record<string, string>[] = [];
-        const errors: ImportError[] = [];
-
-        rows.forEach((cols, idx) => {
-          const rowNum = idx + 2;
-          const row: Record<string, string> = {};
-          headers.forEach((h, i) => { row[h] = cols[i] ?? ""; });
-
-          headers.filter((h) => !validImportCols.has(h)).forEach((col) =>
-            errors.push({ row: rowNum, field: col, reason: `Unknown column "${col}" will be ignored` })
-          );
-
-          let hasError = false;
-
-          if (row.docId && !existingCategoryIds.includes(row.docId)) {
-            errors.push({ row: rowNum, field: "docId", reason: "Category not found — cannot update" });
-            hasError = true;
-          }
-
-          if (!row.docId) {
-            if (!(CATEGORY_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
-              errors.push({ row: rowNum, field: "name", reason: "name is required for new categories" });
-              hasError = true;
-            } else {
-              const derivedId = formatDocId(row.name);
-              if (existingCategoryNames.includes(derivedId)) {
-                errors.push({ row: rowNum, field: "name", reason: `Category "${row.name}" already exists` });
-                hasError = true;
-              }
-            }
-          }
-
-          if (row.order && isNaN(Number(row.order))) {
-            errors.push({ row: rowNum, field: "order", reason: "Must be a valid number" });
-            hasError = true;
-          }
-
-          if (!hasError) validRows.push(row);
-        });
-
-        setImportPreview({ validRows, errors });
-      } catch {
-        toast.error("Failed to read CSV file.");
-      } finally {
-        if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!row.docId) {
+      if (!(CATEGORY_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
+        errors.push({ row: rowNum, field: "name", reason: "name is required for new categories" });
+      } else if (existingCategoryNames.includes(formatDocId(row.name))) {
+        errors.push({ row: rowNum, field: "name", reason: `Category "${row.name}" already exists` });
       }
-    };
-    reader.readAsText(file);
+    }
+
+    if (row.order && isNaN(Number(row.order))) {
+      errors.push({ row: rowNum, field: "order", reason: "Must be a valid number" });
+    }
+
+    return errors;
+  }
+
+  async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+
+    const result = await parseImportFile(file, {
+      protectedFields: CATEGORY_PROTECTED_FIELDS,
+      importableFields: CATEGORY_IMPORTABLE_FIELDS,
+      validateRow: validateCategoryRow,
+    });
+
+    if (isFileError(result)) {
+      toast.error(result.fileError);
+      return;
+    }
+    setImportPreview(result);
   }
 
   async function handleConfirmImport() {
-    if (!importPreview || importPreview.validRows.length === 0) return;
+    const importable =
+      importPreview?.rows.filter((r) => r.action !== "error") ?? [];
+    if (importable.length === 0) return;
     setImportLoading(true);
     try {
-      let count = 0;
-      for (const row of importPreview.validRows) {
-        if (row.docId) {
-          const update: Partial<Omit<Category, "docId">> = {};
+      let created = 0;
+      let updated = 0;
+      for (const { action, data: row } of importable) {
+        if (action === "update") {
+          // Clearing the soft-delete flags restores a category deleted after the CSV was
+          // exported; on a live category it is a no-op.
+          const update: Partial<Omit<Category, "docId">> = {
+            isDeleted: false,
+            deletedAt: null,
+          };
           if (row.name) update.name = row.name;
           if (row.order) update.order = Number(row.order);
           await ProductService.updateCategory(row.docId, update);
+          updated++;
         } else {
           await ProductService.createCategory({
             name: row.name,
+            createdAt: new Date(),
             ...(row.order ? { order: Number(row.order) } : {}),
           });
+          created++;
         }
-        count++;
       }
       log({
         category: LOG_CATEGORY.IMPORT,
         severityLevel: LOG_SEVERITY.HIGH,
         action: "Import Categories",
-        notes: `Admin imported ${count} categor${count !== 1 ? "ies" : "y"} via CSV`,
+        notes: `Admin created ${created} and updated ${updated} categor${created + updated !== 1 ? "ies" : "y"} via CSV`,
         page: LOG_PAGE.CATEGORIES,
       });
-      toast.success(`Imported ${count} categor${count !== 1 ? "ies" : "y"}.`);
+      toast.success(`Created ${created} and updated ${updated} categor${created + updated !== 1 ? "ies" : "y"}.`);
       setImportPreview(null);
     } catch {
       toast.error("Failed to import categories.");
@@ -284,14 +276,15 @@ export default function CategoriesPage() {
             onChange={handleImportCSV}
             className="hidden"
           />
-          {/* <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowImportInfo(true)}
-            disabled={importLoading}
-          >
-            {importLoading ? "Importing…" : "Import CSV"}
-          </Button> */}
+          {isAdmin && (
+            <Button
+              variant="outline"
+              onClick={() => setShowImportInfo(true)}
+              disabled={importLoading}
+            >
+              {importLoading ? "Importing…" : "Import CSV"}
+            </Button>
+          )}
           <div className="flex gap-2">
           <Button variant="outline"  onClick={exportToCSV}>Export CSV</Button>
           <Button
@@ -373,75 +366,22 @@ export default function CategoriesPage() {
         </table>
       </div>
 
-      {/* CSV Field Guide Dialog */}
-      <Dialog open={showImportInfo} onOpenChange={setShowImportInfo}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>CSV Import Guide — Categories</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="space-y-1.5">
-              <p className="font-medium text-black">Editable fields</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(["name", "order"] as const).map((f) => (
-                  <span key={f} className="rounded-md bg-background border border-border px-2 py-0.5 text-xs text-black font-mono">{f}</span>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <p className="font-medium text-black">Required fields <span className="text-xs font-normal text-light-grey">(for new rows)</span></p>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="rounded-md bg-amber-50 border border-amber-300 px-2 py-0.5 text-xs text-amber-800 font-mono">name</span>
-              </div>
-            </div>
-            <p className="text-xs text-light-grey leading-relaxed">
-              Include <span className="font-mono text-black">docId</span> to update an existing category. Omit it to create a new one.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImportInfo(false)}>Cancel</Button>
-            <Button onClick={() => { setShowImportInfo(false); fileInputRef.current?.click(); }}>
-              Choose File →
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Import Preview Dialog */}
-      <Dialog open={importPreview !== null} onOpenChange={() => setImportPreview(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Import Preview</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {importPreview && importPreview.errors.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium text-black">Errors</p>
-                <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-background p-3 space-y-1">
-                  {importPreview.errors.map((e, i) => (
-                    <p key={i} className="text-xs text-black">
-                      <span className="font-medium">Row {e.row}</span> — {e.field}: {e.reason}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-sm text-black">
-              <span className="font-medium">{importPreview?.validRows.length ?? 0}</span> row(s) will be imported.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportPreview(null)} disabled={importLoading}>
-              Cancel
-            </Button>
-            {(importPreview?.validRows.length ?? 0) > 0 && (
-              <Button onClick={handleConfirmImport} disabled={importLoading}>
-                {importLoading ? "Importing…" : `Import ${importPreview?.validRows.length} row(s)`}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImportCsvDialog
+        entityLabel="Categories"
+        idCollection="productCategories"
+        exampleRecord={firstExampleRecord(orderedCategories)}
+        guideOpen={showImportInfo}
+        onGuideOpenChange={setShowImportInfo}
+        guide={{
+          editable: CATEGORY_IMPORTABLE_FIELDS,
+          required: CATEGORY_REQUIRED_FIELDS,
+        }}
+        onChooseFile={() => fileInputRef.current?.click()}
+        preview={importPreview}
+        onPreviewClose={() => setImportPreview(null)}
+        loading={importLoading}
+        onConfirm={handleConfirmImport}
+      />
 
       {/* ── Create / Edit Category Dialog ── */}
       <Dialog

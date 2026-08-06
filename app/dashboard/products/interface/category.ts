@@ -6,5 +6,6 @@ export interface Category {
   updatedAt?: Date;
   imageUrl?: string;
   isDeleted?: boolean;
-  deletedAt?: Date;
+  /** Null once a CSV re-import has restored a soft-deleted category. */
+  deletedAt?: Date | null;
 }

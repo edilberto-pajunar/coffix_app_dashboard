@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Any signed-in user who has a staff record is treated as dashboard staff.
+    function isStaff() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/staffs/$(request.auth.uid));
+    }
+
+    // A user may always read their own staff document (needed at login,
+    // before isStaff() can be evaluated for gating anything else).
+    match /staffs/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isStaff();
+    }
+
+    // Dashboard-managed collections: readable/writable by any staff member.
+    match /campaigns/{docId}         { allow read, write: if isStaff(); }
+    match /counters/{docId}          { allow read, write: if isStaff(); }
+    match /coupons/{docId}           { allow read, write: if isStaff(); }
+    match /customers/{docId}         { allow read, write: if isStaff(); }
+    match /emails/{docId}            { allow read, write: if isStaff(); }
+    match /logs/{docId}              { allow read, write: if isStaff(); }
+    match /modifierGroups/{docId}    { allow read, write: if isStaff(); }
+    match /modifiers/{docId}         { allow read, write: if isStaff(); }
+    match /orders/{docId}            { allow read, write: if isStaff(); }
+    match /productCategories/{docId} { allow read, write: if isStaff(); }
+    match /products/{docId}          { allow read, write: if isStaff(); }
+    match /referrals/{docId}         { allow read, write: if isStaff(); }
+    match /stores/{docId}            { allow read, write: if isStaff(); }
+    match /transactions/{docId}      { allow read, write: if isStaff(); }
+    match /global/{docId}            { allow read, write: if isStaff(); }
+  }
+}

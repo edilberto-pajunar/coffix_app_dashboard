@@ -4,6 +4,11 @@ const COLLECTION_GLOBAL_SETTINGS = "EQ0i4V6H47Ra7yMCdG7B";
 export const GLOBAL_COLLECTION_LOG_ID = "VmvT6HFpSMe6pC8AyyeR";
 const WEBAPP_VERSION = "1.0.0+63";
 
+// Zero-padded width of the numeric part of a sequential ID (PRD-000001). Lives here
+// rather than in generateId.ts so app/utils/idFormat.ts can validate against it without
+// pulling in that module's Firebase import.
+export const SEQUENTIAL_ID_PADDING = 6;
+
 // Prefixes for human-readable sequential document IDs (see app/utils/generateId.ts).
 // Extend as other collections adopt the helper.
 export const ID_PREFIXES = {

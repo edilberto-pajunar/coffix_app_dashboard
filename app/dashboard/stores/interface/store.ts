@@ -27,7 +27,8 @@ export interface Store {
   city?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
-  deletedAt?: Date;
+  /** Null once a CSV re-import has restored a soft-deleted store. */
+  deletedAt?: Date | null;
   isDeleted?: boolean | false; // default to false
 }
 

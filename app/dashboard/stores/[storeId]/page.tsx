@@ -8,6 +8,8 @@ import { useStoreStore } from "../store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
 import { isStoreOpenAt, DayHours, HolidayHours, Store, parseLocation, formatLocation, isValidCoordinate, isStoreFieldTaken } from "../interface/store";
 import { StoreService } from "../service/StoreService";
+import { useDashboardStore } from "../../products/store/useDashboardStore";
+import { productIdsReferencingStore } from "../../products/interface/product";
 import { formatTime } from "@/app/utils/formatting";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -244,8 +246,12 @@ export default function StoreDetailPage() {
   async function handleDeleteStore() {
     if (!store) return;
     setLoading(true);
+    const affectedProductIds = productIdsReferencingStore(
+      useDashboardStore.getState().products,
+      store.docId,
+    );
     try {
-      await StoreService.deleteStore(store.docId);
+      await StoreService.deleteStoreCascade(store.docId, affectedProductIds);
       log({
         category: LOG_CATEGORY.STORES,
         severityLevel: LOG_SEVERITY.HIGH,

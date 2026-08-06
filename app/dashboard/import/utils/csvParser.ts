@@ -1,6 +1,12 @@
 import Papa from "papaparse";
 import { schemas, CollectionKey, FieldSpec } from "./importSchemas";
 import { parseArrayCell } from "@/app/utils/csvUtils";
+import {
+  exampleDocId,
+  isValidDocId,
+  labelForCollection,
+} from "@/app/utils/idFormat";
+import { ID_PREFIXES, SEQUENTIAL_ID_PADDING } from "@/app/utils/constant";
 
 export type { CollectionKey } from "./importSchemas";
 
@@ -153,6 +159,16 @@ export function parseCSV<T extends Record<string, any>>(
 
     const docId = rawRow["docId"]?.trim() ?? "";
     if (docId) {
+      // Catches a file uploaded under the wrong collection before it reaches the
+      // backend, which would otherwise be the first thing to notice. This page renders
+      // the message as bare text with no explainer, so the format goes in the string.
+      if (!isValidDocId(docId, collection)) {
+        errors.push({
+          row: rowNum,
+          message: `docId "${docId}" is not a valid ${labelForCollection(collection)} ID — expected format ${exampleDocId(collection)} (${ID_PREFIXES[collection]}- followed by ${SEQUENTIAL_ID_PADDING} digits). Leave docId blank to create a new record.`,
+        });
+        return;
+      }
       updates.push({ ...row, docId } as unknown as T);
     } else {
       creates.push(row as unknown as T);

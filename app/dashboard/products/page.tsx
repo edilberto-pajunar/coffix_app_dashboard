@@ -14,11 +14,11 @@ import {
   PRODUCT_REQUIRED_FIELDS,
   PRODUCT_EXPORTABLE_FIELDS,
 } from "./constants/productFieldConstants";
-import {
-  parseCSVText,
-  parseArrayCell,
-} from "@/app/utils/csvUtils";
+import { classifyDocIdTarget, partitionIdCell, validateDocIdFormat } from "@/components/import/storeRefs";
 import { exportRowsToCSV } from "@/app/utils/import";
+import { ImportCsvDialog, firstExampleRecord } from "@/components/import/ImportCsvDialog";
+import { isFileError, parseImportFile } from "@/components/import/parseImportFile";
+import type { ImportError, ImportPreview } from "@/components/import/types";
 import Image from "next/image";
 import {
   Dialog,
@@ -238,10 +238,8 @@ export default function ProductsPage() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [orderedProducts, setOrderedProducts] = useState<Product[]>([]);
 
-  type ImportError = { row: number; field: string; reason: string };
-  type ImportPreview = { validRows: Record<string, string>[]; errors: ImportError[] } | null;
   const [importLoading, setImportLoading] = useState(false);
-  const [importPreview, setImportPreview] = useState<ImportPreview>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [showImportInfo, setShowImportInfo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -437,156 +435,150 @@ export default function ProductsPage() {
     exportRowsToCSV(filtered, PRODUCT_EXPORTABLE_FIELDS, "products");
   }
 
-  function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target?.result as string;
-        const { headers, rows } = parseCSVText(text);
+  function validateProductRow(row: Record<string, string>, rowNum: number): ImportError[] {
+    const errors: ImportError[] = [];
+    const existingProductIds = useDashboardStore.getState().products.map((p) => p.docId!);
+    const allProductIds = useDashboardStore.getState().allProducts.map((p) => p.docId!);
+    const existingCategoryIds = useDashboardStore.getState().categories.map((c) => c.docId!);
+    const existingStoreIds = useStoreStore.getState().stores.map((s) => s.docId);
+    const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId);
+    const existingModifierGroupIds = useDashboardStore.getState().modifierGroups.map((g) => g.docId!);
+    const allModifierGroupIds = useDashboardStore.getState().allModifierGroups.map((g) => g.docId!);
 
-        const protectedInFile = headers.filter((h) =>
-          (PRODUCT_PROTECTED_FIELDS as readonly string[]).includes(h)
-        );
-        if (protectedInFile.length > 0) {
-          toast.error(`CSV contains protected columns: ${protectedInFile.join(", ")}. Remove them and re-upload.`);
-          if (fileInputRef.current) fileInputRef.current.value = "";
-          return;
-        }
+    // Format first: a wrong-entity ID gets a message naming the right section, instead
+    // of the membership check's generic "not found". A soft-deleted target is not an
+    // error — the row restores it on write. Only an unknown ID fails.
+    const docIdFormatError = validateDocIdFormat(row.docId, "products", rowNum);
+    if (docIdFormatError) {
+      errors.push(docIdFormatError);
+    } else if (
+      row.docId &&
+      classifyDocIdTarget(row.docId, existingProductIds, allProductIds) === "unknown"
+    ) {
+      errors.push({ row: rowNum, field: "docId", reason: "Product not found — cannot update" });
+    }
 
-        const existingProductIds = useDashboardStore.getState().products.map((p) => p.docId!);
-        const existingCategoryIds = useDashboardStore.getState().categories.map((c) => c.docId!);
-        const existingStoreIds = useStoreStore.getState().stores.map((s) => s.docId);
-        const existingModifierGroupIds = useDashboardStore.getState().modifierGroups.map((g) => g.docId!);
-        const validImportCols = new Set([...(PRODUCT_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
-
-        const validRows: Record<string, string>[] = [];
-        const errors: ImportError[] = [];
-
-        rows.forEach((cols, idx) => {
-          const rowNum = idx + 2;
-          const row: Record<string, string> = {};
-          headers.forEach((h, i) => { row[h] = cols[i] ?? ""; });
-
-          headers.filter((h) => !validImportCols.has(h)).forEach((col) =>
-            errors.push({ row: rowNum, field: col, reason: `Unknown column "${col}" will be ignored` })
-          );
-
-          let hasError = false;
-
-          if (row.docId && !existingProductIds.includes(row.docId)) {
-            errors.push({ row: rowNum, field: "docId", reason: "Product not found — cannot update" });
-            hasError = true;
-          }
-
-          if (!row.docId) {
-            if (!(PRODUCT_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
-              errors.push({ row: rowNum, field: "name", reason: "name is required for new products" });
-              hasError = true;
-            }
-          }
-
-          if (row.price !== undefined && row.price !== "") {
-            const v = parseFloat(row.price);
-            if (isNaN(v) || v < 0) {
-              errors.push({ row: rowNum, field: "price", reason: "Must be a valid non-negative number" });
-              hasError = true;
-            }
-          }
-
-          if (row.cost !== undefined && row.cost !== "") {
-            const v = parseFloat(row.cost);
-            if (isNaN(v) || v < 0) {
-              errors.push({ row: rowNum, field: "cost", reason: "Must be a valid non-negative number" });
-              hasError = true;
-            }
-          }
-
-          if (row.order !== undefined && row.order !== "") {
-            if (isNaN(parseInt(row.order))) {
-              errors.push({ row: rowNum, field: "order", reason: "Must be a valid integer" });
-              hasError = true;
-            }
-          }
-
-          if (row.categoryId && !existingCategoryIds.includes(row.categoryId)) {
-            errors.push({ row: rowNum, field: "categoryId", reason: `Category "${row.categoryId}" not found` });
-            hasError = true;
-          }
-
-          if (row.modifierGroupIds) {
-            const ids = parseArrayCell(row.modifierGroupIds);
-            const invalid = ids.filter((id) => !existingModifierGroupIds.includes(id));
-            if (invalid.length > 0) {
-              errors.push({ row: rowNum, field: "modifierGroupIds", reason: `Unknown modifier group IDs: ${invalid.join(", ")}` });
-              hasError = true;
-            }
-          }
-
-          if (row.availableToStores) {
-            const ids = parseArrayCell(row.availableToStores);
-            const invalid = ids.filter((id) => !existingStoreIds.includes(id));
-            if (invalid.length > 0) {
-              errors.push({ row: rowNum, field: "availableToStores", reason: `Unknown store IDs: ${invalid.join(", ")}` });
-              hasError = true;
-            }
-          }
-
-          if (row.disabledStores) {
-            const ids = parseArrayCell(row.disabledStores);
-            const invalid = ids.filter((id) => !existingStoreIds.includes(id));
-            if (invalid.length > 0) {
-              errors.push({ row: rowNum, field: "disabledStores", reason: `Unknown store IDs: ${invalid.join(", ")}` });
-              hasError = true;
-            }
-          }
-
-          if (!hasError) validRows.push(row);
-        });
-
-        setImportPreview({ validRows, errors });
-      } catch {
-        toast.error("Failed to read CSV file.");
-      } finally {
-        if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!row.docId) {
+      if (!(PRODUCT_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
+        errors.push({ row: rowNum, field: "name", reason: "name is required for new products" });
       }
-    };
-    reader.readAsText(file);
+    }
+
+    (["price", "cost"] as const).forEach((field) => {
+      if (row[field] !== undefined && row[field] !== "") {
+        const v = parseFloat(row[field]);
+        if (isNaN(v) || v < 0) {
+          errors.push({ row: rowNum, field, reason: "Must be a valid non-negative number" });
+        }
+      }
+    });
+
+    if (row.order !== undefined && row.order !== "") {
+      if (isNaN(parseInt(row.order))) {
+        errors.push({ row: rowNum, field: "order", reason: "Must be a valid integer" });
+      }
+    }
+
+    if (row.categoryId && !existingCategoryIds.includes(row.categoryId)) {
+      errors.push({ row: rowNum, field: "categoryId", reason: `Category "${row.categoryId}" not found` });
+    }
+
+    // Soft-deleted references are dropped on write rather than failing the row, so
+    // only genuinely unknown IDs are errors here. See buildStoreList below.
+    if (row.modifierGroupIds) {
+      const { unknown } = partitionIdCell(
+        row.modifierGroupIds,
+        existingModifierGroupIds,
+        allModifierGroupIds,
+      );
+      if (unknown.length > 0) {
+        errors.push({ row: rowNum, field: "modifierGroupIds", reason: `Unknown modifier group IDs: ${unknown.join(", ")}` });
+      }
+    }
+
+    (["availableToStores", "disabledStores"] as const).forEach((field) => {
+      if (row[field]) {
+        const { unknown } = partitionIdCell(row[field], existingStoreIds, allStoreIds);
+        if (unknown.length > 0) {
+          errors.push({ row: rowNum, field, reason: `Unknown store IDs: ${unknown.join(", ")}` });
+        }
+      }
+    });
+
+    return errors;
+  }
+
+  async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+
+    const result = await parseImportFile(file, {
+      protectedFields: PRODUCT_PROTECTED_FIELDS,
+      importableFields: PRODUCT_IMPORTABLE_FIELDS,
+      validateRow: validateProductRow,
+    });
+
+    if (isFileError(result)) {
+      toast.error(result.fileError);
+      return;
+    }
+    setImportPreview(result);
   }
 
   async function handleConfirmImport() {
-    if (!importPreview || importPreview.validRows.length === 0) return;
+    const importable =
+      importPreview?.rows.filter((r) => r.action !== "error") ?? [];
+    if (importable.length === 0) return;
     setImportLoading(true);
     try {
-      let count = 0;
-      for (const row of importPreview.validRows) {
+      let created = 0;
+      let updated = 0;
+      // Read once: these lists don't change mid-import, and the validator has
+      // already guaranteed every remaining ID is either live or soft-deleted.
+      const storeIds = useStoreStore.getState().stores.map((s) => s.docId);
+      const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId);
+      const groupIds = useDashboardStore.getState().modifierGroups.map((g) => g.docId!);
+      const allGroupIds = useDashboardStore.getState().allModifierGroups.map((g) => g.docId!);
+
+      for (const { action, data: row } of importable) {
         const data: Record<string, unknown> = {};
         if (row.name) data.name = row.name;
         if (row.price !== undefined && row.price !== "") data.price = parseFloat(row.price);
         if (row.cost !== undefined && row.cost !== "") data.cost = parseFloat(row.cost);
         if (row.order !== undefined && row.order !== "") data.order = parseInt(row.order);
         if (row.categoryId) data.categoryId = row.categoryId;
-        if (row.modifierGroupIds !== undefined) data.modifierGroupIds = parseArrayCell(row.modifierGroupIds);
-        if (row.availableToStores !== undefined) data.availableToStores = parseArrayCell(row.availableToStores);
-        if (row.disabledStores !== undefined) data.disabledStores = parseArrayCell(row.disabledStores);
+        // Only live IDs are written — references to soft-deleted records are dropped.
+        if (row.modifierGroupIds !== undefined)
+          data.modifierGroupIds = partitionIdCell(row.modifierGroupIds, groupIds, allGroupIds).live;
+        if (row.availableToStores !== undefined)
+          data.availableToStores = partitionIdCell(row.availableToStores, storeIds, allStoreIds).live;
+        if (row.disabledStores !== undefined)
+          data.disabledStores = partitionIdCell(row.disabledStores, storeIds, allStoreIds).live;
         if (row.imageUrl !== undefined) data.imageUrl = row.imageUrl;
 
-        if (row.docId) {
-          await ProductService.updateProduct(row.docId, data);
+        if (action === "update") {
+          // Clearing the soft-delete flags restores a product deleted after the CSV was
+          // exported; on a live product it is a no-op.
+          await ProductService.updateProduct(row.docId, {
+            ...data,
+            isDeleted: false,
+            deletedAt: null,
+          });
+          updated++;
         } else {
           await ProductService.createProduct(data as Parameters<typeof ProductService.createProduct>[0]);
+          created++;
         }
-        count++;
       }
       log({
         category: LOG_CATEGORY.IMPORT,
         severityLevel: LOG_SEVERITY.HIGH,
         action: "Import Products",
-        notes: `Admin imported ${count} product${count !== 1 ? "s" : ""} via CSV`,
+        notes: `Admin created ${created} and updated ${updated} product(s) via CSV`,
         page: LOG_PAGE.PRODUCTS,
       });
-      toast.success(`Imported ${count} product${count !== 1 ? "s" : ""}.`);
+      toast.success(`Created ${created} and updated ${updated} product(s).`);
       setImportPreview(null);
     } catch {
       toast.error("Failed to import products.");
@@ -661,6 +653,13 @@ export default function ProductsPage() {
             onChange={handleImportCSV}
             className="hidden"
           />
+          <Button
+            variant="outline"
+            onClick={() => setShowImportInfo(true)}
+            disabled={importLoading}
+          >
+            {importLoading ? "Importing…" : "Import CSV"}
+          </Button>
           <Button
             variant="outline"
             onClick={exportToCSV}
@@ -964,40 +963,6 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* CSV Field Guide Dialog */}
-      <Dialog open={showImportInfo} onOpenChange={setShowImportInfo}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>CSV Import Guide — Products</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="space-y-1.5">
-              <p className="font-medium text-black">Editable fields</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(["name", "price", "cost", "order", "categoryId", "modifierGroupIds", "availableToStores", "disabledStores", "imageUrl"] as const).map((f) => (
-                  <span key={f} className="rounded-md bg-background border border-border px-2 py-0.5 text-xs text-black font-mono">{f}</span>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <p className="font-medium text-black">Required fields <span className="text-xs font-normal text-light-grey">(for new rows)</span></p>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="rounded-md bg-amber-50 border border-amber-300 px-2 py-0.5 text-xs text-amber-800 font-mono">name</span>
-              </div>
-            </div>
-            <p className="text-xs text-light-grey leading-relaxed">
-              Include <span className="font-mono text-black">docId</span> to update an existing product. Omit it to create a new one. Array fields <span className="font-mono text-black">modifierGroupIds</span>, <span className="font-mono text-black">availableToStores</span>, and <span className="font-mono text-black">disabledStores</span> use <span className="font-mono text-black">|</span> as separator.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImportInfo(false)}>Cancel</Button>
-            <Button onClick={() => { setShowImportInfo(false); fileInputRef.current?.click(); }}>
-              Choose File →
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Bulk Update Stores Dialog ── */}
       <Dialog open={showBulkStores} onOpenChange={(open) => { if (!open) setShowBulkStores(false); }}>
         <DialogContent className="max-w-md">
@@ -1056,41 +1021,30 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Preview Dialog */}
-      <Dialog open={importPreview !== null} onOpenChange={() => setImportPreview(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Import Preview</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {importPreview && importPreview.errors.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium text-black">Errors</p>
-                <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-background p-3 space-y-1">
-                  {importPreview.errors.map((e, i) => (
-                    <p key={i} className="text-xs text-black">
-                      <span className="font-medium">Row {e.row}</span> — {e.field}: {e.reason}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-sm text-black">
-              <span className="font-medium">{importPreview?.validRows.length ?? 0}</span> row(s) will be imported.
+      <ImportCsvDialog
+        entityLabel="Products"
+        idCollection="products"
+        exampleRecord={firstExampleRecord(products)}
+        guideOpen={showImportInfo}
+        onGuideOpenChange={setShowImportInfo}
+        guide={{
+          editable: PRODUCT_IMPORTABLE_FIELDS,
+          required: PRODUCT_REQUIRED_FIELDS,
+          note: (
+            <p className="text-xs leading-relaxed text-light-grey">
+              Array fields <span className="font-mono text-black">modifierGroupIds</span>,{" "}
+              <span className="font-mono text-black">availableToStores</span> and{" "}
+              <span className="font-mono text-black">disabledStores</span> accept a JSON list
+              or a <span className="font-mono text-black">|</span>-separated list.
             </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportPreview(null)} disabled={importLoading}>
-              Cancel
-            </Button>
-            {(importPreview?.validRows.length ?? 0) > 0 && (
-              <Button onClick={handleConfirmImport} disabled={importLoading}>
-                {importLoading ? "Importing…" : `Import ${importPreview?.validRows.length} row(s)`}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          ),
+        }}
+        onChooseFile={() => fileInputRef.current?.click()}
+        preview={importPreview}
+        onPreviewClose={() => setImportPreview(null)}
+        loading={importLoading}
+        onConfirm={handleConfirmImport}
+      />
 
     </div>
   );

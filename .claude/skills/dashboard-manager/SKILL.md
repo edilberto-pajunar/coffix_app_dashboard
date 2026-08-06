@@ -1,3 +1,8 @@
+---
+name: dashboard-manager
+description: The canonical pattern for implementing any new CRUD feature in the Coffix dashboard — page structure, field constants, Firestore wiring, and form conventions. Use when adding or modifying a dashboard section.
+---
+
 # Dashboard Manager — CRUD Feature Standard
 
 This document defines the canonical pattern for implementing any new CRUD feature in the Coffix dashboard. Follow it exactly; do not deviate without a documented reason.

@@ -12,8 +12,10 @@ import {
   STAFF_IMPORTABLE_FIELDS,
   STAFF_EXPORTABLE_FIELDS,
 } from "./constants/staffFieldConstants";
-import { parseCSVText, parseArrayCell } from "@/app/utils/csvUtils";
+import { parseCSVText } from "@/app/utils/csvUtils";
+import { partitionIdCell } from "@/components/import/storeRefs";
 import { exportRowsToCSV } from "@/app/utils/import";
+import { SYSTEM_IMPORT_FIELDS } from "@/components/import/parseImportFile";
 import {
   Dialog,
   DialogContent,
@@ -343,7 +345,8 @@ export default function StaffsPage() {
         const { headers, rows } = parseCSVText(text);
 
         const protectedInFile = headers.filter((h) =>
-          (STAFF_PROTECTED_FIELDS as readonly string[]).includes(h)
+          (STAFF_PROTECTED_FIELDS as readonly string[]).includes(h) &&
+          !(SYSTEM_IMPORT_FIELDS as readonly string[]).includes(h)
         );
         if (protectedInFile.length > 0) {
           toast.error(`CSV contains protected columns: ${protectedInFile.join(", ")}. Remove them and re-upload.`);
@@ -353,7 +356,8 @@ export default function StaffsPage() {
 
         const existingStaffIds = useStaffStore.getState().staffs.map((s) => s.docId!);
         const storeIds = useStoreStore.getState().stores.map((s) => s.docId!);
-        const validImportCols = new Set([...(STAFF_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
+        const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId!);
+        const validImportCols = new Set([...(STAFF_IMPORTABLE_FIELDS as readonly string[]), ...(SYSTEM_IMPORT_FIELDS as readonly string[])]);
 
         const validRows: Record<string, string>[] = [];
         const errors: { row: number; field: string; reason: string }[] = [];
@@ -382,11 +386,11 @@ export default function StaffsPage() {
             hasError = true;
           }
 
+          // Soft-deleted stores are dropped on write, so only unknown IDs fail here.
           if (row.storeIds) {
-            const ids = parseArrayCell(row.storeIds);
-            const invalid = ids.filter((id) => !storeIds.includes(id));
-            if (invalid.length > 0) {
-              errors.push({ row: rowNum, field: "storeIds", reason: `Store(s) not found: ${invalid.join(", ")}` });
+            const { unknown } = partitionIdCell(row.storeIds, storeIds, allStoreIds);
+            if (unknown.length > 0) {
+              errors.push({ row: rowNum, field: "storeIds", reason: `Store(s) not found: ${unknown.join(", ")}` });
               hasError = true;
             }
           }
@@ -415,10 +419,15 @@ export default function StaffsPage() {
     setImportLoading(true);
     try {
       let count = 0;
+      const liveStoreIds = useStoreStore.getState().stores.map((s) => s.docId!);
+      const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId!);
+
       for (const row of importPreview.validRows) {
         const update: Partial<Omit<Staff, "docId">> = {};
         if (row.role) update.role = row.role as StaffRole;
-        if (row.storeIds !== undefined) update.storeIds = parseArrayCell(row.storeIds);
+        // Only live IDs are written — references to soft-deleted stores are dropped.
+        if (row.storeIds !== undefined)
+          update.storeIds = partitionIdCell(row.storeIds, liveStoreIds, allStoreIds).live;
         if (row.disabled !== undefined && row.disabled !== "") update.disabled = row.disabled.toLowerCase() === "true";
         if (row.firstName !== undefined) update.firstName = row.firstName;
         if (row.lastName !== undefined) update.lastName = row.lastName;

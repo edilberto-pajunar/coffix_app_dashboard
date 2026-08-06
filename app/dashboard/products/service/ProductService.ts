@@ -39,39 +39,75 @@ function notDeleted<T extends { isDeleted?: boolean }>(items: T[]): T[] {
   return items.filter((item) => !item.isDeleted);
 }
 
-function normalizeProduct(product: Product): Product {
+// Store references left behind by deletions that predate deleteStoreCascade. Dropping
+// them here keeps stale IDs out of the UI and out of CSV exports without a migration;
+// the cascade is what keeps Firestore itself clean from now on. An empty `liveStoreIds`
+// means the store list hasn't loaded yet, so filtering then would blank every product's
+// assignments — leave them alone until it has.
+function withLiveStoresOnly(ids: string[], liveStoreIds?: ReadonlySet<string>): string[] {
+  if (!liveStoreIds || liveStoreIds.size === 0) return ids;
+  return ids.filter((id) => liveStoreIds.has(id));
+}
+
+function normalizeProduct(
+  product: Product,
+  liveStoreIds?: ReadonlySet<string>,
+): Product {
   return {
     ...product,
-    availableToStores: toStringArray(product.availableToStores),
-    disabledStores: toStringArray(product.disabledStores),
+    availableToStores: withLiveStoresOnly(
+      toStringArray(product.availableToStores),
+      liveStoreIds,
+    ),
+    disabledStores: withLiveStoresOnly(
+      toStringArray(product.disabledStores),
+      liveStoreIds,
+    ),
     modifierGroupIds: toStringArray(product.modifierGroupIds),
   };
 }
 
 export const ProductService = {
-  listenToProducts: (onUpdate: (products: Product[]) => void): Unsubscribe =>
-    onSnapshot(collection(db, "products"), (snap) =>
-      onUpdate(notDeleted(snapToArray<Product>(snap)).map(normalizeProduct)),
-    ),
+  // `getLiveStoreIds` is read per snapshot rather than captured, so the filter reflects
+  // the store list as of the latest product update. `allProducts` keeps soft-deleted
+  // records so importers can tell a deleted docId apart from a typo — see
+  // listenToModifierGroups for the same arrangement.
+  listenToProducts: (
+    onUpdate: (products: Product[], allProducts: Product[]) => void,
+    getLiveStoreIds?: () => readonly string[],
+  ): Unsubscribe =>
+    onSnapshot(collection(db, "products"), (snap) => {
+      const liveStoreIds = getLiveStoreIds
+        ? new Set(getLiveStoreIds())
+        : undefined;
+      const products = snapToArray<Product>(snap).map((p) =>
+        normalizeProduct(p, liveStoreIds),
+      );
+      onUpdate(notDeleted(products), products);
+    }),
 
   listenToModifiers: (onUpdate: (modifiers: Modifier[]) => void): Unsubscribe =>
     onSnapshot(collection(db, "modifiers"), (snap) =>
       onUpdate(notDeleted(snapToArray<Modifier>(snap))),
     ),
 
+  // `allGroups` keeps soft-deleted records so importers can tell a stale reference
+  // apart from a typo. See StoreService.listenToStores for the same arrangement.
   listenToModifierGroups: (
-    onUpdate: (groups: ModifierGroup[]) => void,
+    onUpdate: (groups: ModifierGroup[], allGroups: ModifierGroup[]) => void,
   ): Unsubscribe =>
-    onSnapshot(collection(db, "modifierGroups"), (snap) =>
-      onUpdate(notDeleted(snapToArray<ModifierGroup>(snap))),
-    ),
+    onSnapshot(collection(db, "modifierGroups"), (snap) => {
+      const groups = snapToArray<ModifierGroup>(snap);
+      onUpdate(notDeleted(groups), groups);
+    }),
 
   listenToCategories: (
-    onUpdate: (categories: Category[]) => void,
+    onUpdate: (categories: Category[], allCategories: Category[]) => void,
   ): Unsubscribe =>
-    onSnapshot(collection(db, "productCategories"), (snap) =>
-      onUpdate(notDeleted(snapToArray<Category>(snap))),
-    ),
+    onSnapshot(collection(db, "productCategories"), (snap) => {
+      const categories = snapToArray<Category>(snap);
+      onUpdate(notDeleted(categories), categories);
+    }),
 
   // The document ID is a sequential, human-readable code (PRD-000001) rather than a
   // random Firestore ID, allocated atomically via a counter document.

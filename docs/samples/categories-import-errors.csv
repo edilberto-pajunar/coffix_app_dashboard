@@ -1,0 +1,5 @@
+docId,name,order
+,Valid New Category,10
+PRD-000001,,11
+does-not-exist-id,Ghost Category,12
+PRD-000001,Bad Order Category,abc

@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useUserStore } from "../store/useUserStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
+import { deletedRefReason } from "@/components/import/storeRefs";
 import { UserService } from "./UserService";
 import {
   USER_PROTECTED_FIELDS,
   USER_IMPORTABLE_FIELDS,
 } from "../constants/userFieldConstants";
 import { escapeCSV, tsToISO, parseCSVText, triggerCSVDownload } from "@/app/utils/csvUtils";
+import { SYSTEM_IMPORT_FIELDS } from "@/components/import/parseImportFile";
 import {
   Dialog,
   DialogContent,
@@ -291,7 +293,8 @@ export default function UsersPage() {
         const { headers, rows } = parseCSVText(text);
 
         const protectedInFile = headers.filter((h) =>
-          (USER_PROTECTED_FIELDS as readonly string[]).includes(h)
+          (USER_PROTECTED_FIELDS as readonly string[]).includes(h) &&
+          !(SYSTEM_IMPORT_FIELDS as readonly string[]).includes(h)
         );
         if (protectedInFile.length > 0) {
           toast.error(`CSV contains protected columns: ${protectedInFile.join(", ")}. Remove them and re-upload.`);
@@ -301,7 +304,8 @@ export default function UsersPage() {
 
         const existingUserIds = useUserStore.getState().users.map((u) => u.docId!);
         const storeIds = useStoreStore.getState().stores.map((s) => s.docId!);
-        const validImportCols = new Set([...(USER_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
+        const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId!);
+        const validImportCols = new Set([...(USER_IMPORTABLE_FIELDS as readonly string[]), ...(SYSTEM_IMPORT_FIELDS as readonly string[])]);
 
         const validRows: Record<string, string>[] = [];
         const errors: { row: number; field: string; reason: string }[] = [];
@@ -326,7 +330,13 @@ export default function UsersPage() {
           }
 
           if (row.preferredStoreId && !storeIds.includes(row.preferredStoreId)) {
-            errors.push({ row: rowNum, field: "preferredStoreId", reason: `Store "${row.preferredStoreId}" does not exist` });
+            errors.push({
+              row: rowNum,
+              field: "preferredStoreId",
+              reason: allStoreIds.includes(row.preferredStoreId)
+                ? deletedRefReason("Store", row.preferredStoreId)
+                : `Store "${row.preferredStoreId}" does not exist`,
+            });
             hasError = true;
           }
 

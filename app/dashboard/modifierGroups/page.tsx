@@ -1,14 +1,24 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
 import { Button } from "@/components/ui/button";
 import { exportRowsToCSV } from "@/app/utils/import";
-import { MODIFIER_GROUP_EXPORTABLE_FIELDS } from "./constants/modifierGroupFieldConstants";
+import {
+    MODIFIER_GROUP_EXPORTABLE_FIELDS,
+    MODIFIER_GROUP_IMPORTABLE_FIELDS,
+    MODIFIER_GROUP_PROTECTED_FIELDS,
+    MODIFIER_GROUP_REQUIRED_FIELDS,
+} from "./constants/modifierGroupFieldConstants";
 import { ModifierGroupsFilterBar } from "./components/ModifierGroupsFilterBar";
+import { useAuth } from "@/app/lib/AuthContext";
+import { ImportCsvDialog, firstExampleRecord } from "@/components/import/ImportCsvDialog";
+import { isFileError, parseImportFile } from "@/components/import/parseImportFile";
+import type { ImportError, ImportPreview } from "@/components/import/types";
+import { classifyDocIdTarget, validateDocIdFormat } from "@/components/import/storeRefs";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
 import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
@@ -23,6 +33,8 @@ const emptyForm: NewGroupForm = {
 export default function ModifierGroupsPage() {
     const modifierGroups = useDashboardStore((s) => s.modifierGroups);
     const products = useDashboardStore((s) => s.products);
+    const { currentStaff } = useAuth();
+    const isAdmin = currentStaff?.role === "admin";
     const { log } = useActivityLog();
 
     const router = useRouter();
@@ -73,6 +85,11 @@ export default function ModifierGroupsPage() {
 
     const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
+
+    const [importLoading, setImportLoading] = useState(false);
+    const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+    const [showImportInfo, setShowImportInfo] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const deleteTargetGroup = modifierGroups.find((g) => g.docId === deleteTargetId);
     const productsUsingGroup = useMemo(
@@ -156,6 +173,111 @@ export default function ModifierGroupsPage() {
         exportRowsToCSV(modifierGroups, MODIFIER_GROUP_EXPORTABLE_FIELDS, "modifier-groups");
     }
 
+    function validateGroupRow(row: Record<string, string>, rowNum: number): ImportError[] {
+        const errors: ImportError[] = [];
+        const existing = useDashboardStore.getState().modifierGroups;
+        const existingIds = existing.map((g) => g.docId!);
+        const allIds = useDashboardStore.getState().allModifierGroups.map((g) => g.docId!);
+        const existingNames = existing.map((g) => (g.name ?? "").trim().toLowerCase());
+
+        // Format first: a wrong-entity ID gets a message naming the right section, instead
+        // of the membership check's generic "not found". Also separates MODGRP- from MOD-.
+        // A soft-deleted target is not an error — the row restores it on write. Only an
+        // unknown ID fails.
+        const docIdFormatError = validateDocIdFormat(row.docId, "modifierGroups", rowNum);
+        if (docIdFormatError) {
+            errors.push(docIdFormatError);
+        } else if (
+            row.docId &&
+            classifyDocIdTarget(row.docId, existingIds, allIds) === "unknown"
+        ) {
+            errors.push({ row: rowNum, field: "docId", reason: "Modifier group not found — cannot update" });
+        }
+
+        if (!row.docId) {
+            if (!(MODIFIER_GROUP_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
+                errors.push({ row: rowNum, field: "name", reason: "name is required for new modifier groups" });
+            } else if (existingNames.includes(row.name.trim().toLowerCase())) {
+                errors.push({ row: rowNum, field: "name", reason: `Modifier group "${row.name}" already exists` });
+            }
+        }
+
+        if (row.order && isNaN(Number(row.order))) {
+            errors.push({ row: rowNum, field: "order", reason: "Must be a valid number" });
+        }
+
+        return errors;
+    }
+
+    async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        if (!file) return;
+
+        const result = await parseImportFile(file, {
+            protectedFields: MODIFIER_GROUP_PROTECTED_FIELDS,
+            importableFields: MODIFIER_GROUP_IMPORTABLE_FIELDS,
+            validateRow: validateGroupRow,
+        });
+
+        if (isFileError(result)) {
+            toast.error(result.fileError);
+            return;
+        }
+        setImportPreview(result);
+    }
+
+    async function handleConfirmImport() {
+        const importable =
+          importPreview?.rows.filter((r) => r.action !== "error") ?? [];
+        if (importable.length === 0) return;
+        setImportLoading(true);
+        try {
+            let created = 0;
+            let updated = 0;
+            for (const { action, data: row } of importable) {
+                if (action === "update") {
+                    // Clearing the soft-delete flags restores a group deleted after the
+                    // CSV was exported; on a live group it is a no-op. Its modifiers stay
+                    // deleted — the delete cascade is not reversed here.
+                    const update: {
+                        name?: string;
+                        order?: number;
+                        isDeleted: boolean;
+                        deletedAt: null;
+                    } = { isDeleted: false, deletedAt: null };
+                    if (row.name) update.name = row.name;
+                    if (row.order) update.order = Number(row.order);
+                    await ProductService.updateModifierGroup(row.docId, update);
+                    updated++;
+                } else {
+                    await ProductService.createModifierGroup({
+                        name: row.name.trim(),
+                        modifierIds: [],
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                        ...(row.order ? { order: Number(row.order) } : {}),
+                    });
+                    created++;
+                }
+            }
+            log({
+                category: LOG_CATEGORY.IMPORT,
+                severityLevel: LOG_SEVERITY.HIGH,
+                action: "Import Modifier Groups",
+                notes: `Admin created ${created} and updated ${updated} modifier group(s) via CSV`,
+                page: LOG_PAGE.MODIFIER_GROUPS,
+            });
+            toast.success(`Created ${created} and updated ${updated} modifier group(s).`);
+            setImportPreview(null);
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to import modifier groups.");
+        } finally {
+            setImportLoading(false);
+        }
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -166,6 +288,22 @@ export default function ModifierGroupsPage() {
                     </p>
                 </div>
                 <div className="flex gap-2">
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv"
+                        onChange={handleImportCSV}
+                        className="hidden"
+                    />
+                    {isAdmin && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowImportInfo(true)}
+                            disabled={importLoading}
+                        >
+                            {importLoading ? "Importing…" : "Import CSV"}
+                        </Button>
+                    )}
                     <Button variant="outline" onClick={exportToCSV}>Export CSV</Button>
                     <Button onClick={() => setShowCreate(true)}>
                         + New Group
@@ -318,6 +456,29 @@ export default function ModifierGroupsPage() {
                     </div>
                 </div>
             )}
+
+            <ImportCsvDialog
+                entityLabel="Modifier Groups"
+                idCollection="modifierGroups"
+                exampleRecord={firstExampleRecord(modifierGroups)}
+                guideOpen={showImportInfo}
+                onGuideOpenChange={setShowImportInfo}
+                guide={{
+                    editable: MODIFIER_GROUP_IMPORTABLE_FIELDS,
+                    required: MODIFIER_GROUP_REQUIRED_FIELDS,
+                    note: (
+                        <p className="text-xs leading-relaxed text-light-grey">
+                            Modifiers are not importable — add and remove them from the
+                            group&apos;s detail page. New groups are created empty.
+                        </p>
+                    ),
+                }}
+                onChooseFile={() => fileInputRef.current?.click()}
+                preview={importPreview}
+                onPreviewClose={() => setImportPreview(null)}
+                loading={importLoading}
+                onConfirm={handleConfirmImport}
+            />
         </div>
     );
 }

@@ -17,7 +17,6 @@ import {
   Tag,
   Share,
   FileText,
-  Upload,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
@@ -41,7 +40,6 @@ const navItems = [
   { href: "/dashboard/referrals", label: "Referrals", icon: Share, adminOnly: true },
   { href: "/dashboard/coupons", label: "Coupons", icon: Tag, adminOnly: true },
   { href: "/dashboard/logs", label: "Logs", icon: FileText, adminOnly: true },
-  { href: "/dashboard/import", label: "Import", icon: Upload , adminOnly: true},
 ];
 
 export function Sidebar() {

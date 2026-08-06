@@ -14,6 +14,7 @@ import {
 } from "./constants/referralFieldConstants";
 import { parseCSVText } from "@/app/utils/csvUtils";
 import { exportRowsToCSV } from "@/app/utils/import";
+import { SYSTEM_IMPORT_FIELDS } from "@/components/import/parseImportFile";
 import { Button } from "@/components/ui/button";
 import { ReferralsFilterBar } from "./components/ReferralsFilterBar";
 import { formatDateTime } from "@/app/utils/formatting";
@@ -124,7 +125,8 @@ export default function ReferralsPage() {
         const { headers, rows } = parseCSVText(text);
 
         const protectedInFile = headers.filter((h) =>
-          (REFERRAL_PROTECTED_FIELDS as readonly string[]).includes(h)
+          (REFERRAL_PROTECTED_FIELDS as readonly string[]).includes(h) &&
+          !(SYSTEM_IMPORT_FIELDS as readonly string[]).includes(h)
         );
         if (protectedInFile.length > 0) {
           toast.error(`CSV contains protected columns: ${protectedInFile.join(", ")}. Remove them and re-upload.`);
@@ -133,7 +135,7 @@ export default function ReferralsPage() {
         }
 
         const existingReferralIds = useReferralStore.getState().referrals.map((r) => r.docId!);
-        const validImportCols = new Set([...(REFERRAL_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
+        const validImportCols = new Set([...(REFERRAL_IMPORTABLE_FIELDS as readonly string[]), ...(SYSTEM_IMPORT_FIELDS as readonly string[])]);
 
         const validRows: Record<string, string>[] = [];
         const errors: ImportError[] = [];

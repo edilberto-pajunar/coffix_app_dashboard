@@ -1,5 +1,6 @@
 import { db } from "@/app/lib/firebase";
 import { doc, runTransaction, Transaction } from "firebase/firestore";
+import { SEQUENTIAL_ID_PADDING } from "./constant";
 
 // Counter documents live in `counters/{key}` and hold `{ nextNumber: n }`, the next
 // unused sequence value. Kept out of the entity collections so listeners on e.g.
@@ -18,7 +19,7 @@ export interface SequentialIdOptions {
 export const formatSequentialId = (
   prefix: string,
   n: number,
-  padding = 6,
+  padding = SEQUENTIAL_ID_PADDING,
 ): string => `${prefix}-${String(n).padStart(padding, "0")}`;
 
 // Reserves the next sequence number for `counterKey` and returns the formatted code.
@@ -26,7 +27,7 @@ export const formatSequentialId = (
 // atomic — see docs/generation-id.md for why counting documents is unsafe.
 export const reserveSequentialId = async (
   tx: Transaction,
-  { counterKey, prefix, padding = 6 }: SequentialIdOptions,
+  { counterKey, prefix, padding = SEQUENTIAL_ID_PADDING }: SequentialIdOptions,
 ): Promise<string> => {
   const counterRef = doc(db, COUNTERS_COLLECTION, counterKey);
   const snap = await tx.get(counterRef);

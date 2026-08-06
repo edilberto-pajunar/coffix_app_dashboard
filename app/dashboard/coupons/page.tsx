@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useCouponStore } from "./store/useCouponStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
+import { deletedRefReason, validateDocIdFormat } from "@/components/import/storeRefs";
 import { CouponService } from "./service/CouponService";
 import { Coupon } from "./interface/coupon";
 import {
@@ -17,6 +18,7 @@ import {
   parseCSVText,
   triggerCSVDownload,
 } from "@/app/utils/csvUtils";
+import { SYSTEM_IMPORT_FIELDS } from "@/components/import/parseImportFile";
 import {
   Dialog,
   DialogContent,
@@ -268,7 +270,8 @@ export default function CouponsPage() {
         const { headers, rows } = parseCSVText(text);
 
         const protectedInFile = headers.filter((h) =>
-          (COUPON_PROTECTED_FIELDS as readonly string[]).includes(h)
+          (COUPON_PROTECTED_FIELDS as readonly string[]).includes(h) &&
+          !(SYSTEM_IMPORT_FIELDS as readonly string[]).includes(h)
         );
         if (protectedInFile.length > 0) {
           toast.error(`CSV contains protected columns: ${protectedInFile.join(", ")}. Remove them and re-upload.`);
@@ -277,8 +280,9 @@ export default function CouponsPage() {
         }
 
         const storeIds = useStoreStore.getState().stores.map((s) => s.docId!);
+        const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId!);
         const existingCouponIds = useCouponStore.getState().coupons.map((c) => c.docId!);
-        const validImportCols = new Set([...(COUPON_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
+        const validImportCols = new Set([...(COUPON_IMPORTABLE_FIELDS as readonly string[]), ...(SYSTEM_IMPORT_FIELDS as readonly string[])]);
 
         const validRows: Record<string, string>[] = [];
         const errors: ImportError[] = [];
@@ -295,7 +299,14 @@ export default function CouponsPage() {
 
           let hasError = false;
 
-          if (row.docId && !existingCouponIds.includes(row.docId)) {
+          // A malformed or wrong-entity docId is a hard error: unlike an unrecognized
+          // coupon ID below, it can't be meant as "create this as new" — it means the
+          // file came from another section, and importing it would create junk coupons.
+          const docIdFormatError = validateDocIdFormat(row.docId, "coupons", rowNum);
+          if (docIdFormatError) {
+            errors.push(docIdFormatError);
+            hasError = true;
+          } else if (row.docId && !existingCouponIds.includes(row.docId)) {
             errors.push({ row: rowNum, field: "docId", reason: `docId "${row.docId}" not found — will be created as new coupon` });
           }
 
@@ -309,8 +320,16 @@ export default function CouponsPage() {
             hasError = true;
           }
 
+          // A single store reference can't be silently dropped the way a list can,
+          // so this stays an error — but says which of the two problems it is.
           if (row.storeId && !storeIds.includes(row.storeId)) {
-            errors.push({ row: rowNum, field: "storeId", reason: `Store "${row.storeId}" does not exist` });
+            errors.push({
+              row: rowNum,
+              field: "storeId",
+              reason: allStoreIds.includes(row.storeId)
+                ? deletedRefReason("Store", row.storeId)
+                : `Store "${row.storeId}" does not exist`,
+            });
             hasError = true;
           }
 

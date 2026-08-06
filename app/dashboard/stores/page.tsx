@@ -8,15 +8,21 @@ import { useStoreStore } from "./store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
 import { isStoreOpenAt, DayHours, Store, formatLocation, isValidCoordinate, isStoreFieldTaken } from "./interface/store";
 import { StoreService } from "./service/StoreService";
+import { useDashboardStore } from "../products/store/useDashboardStore";
+import { productIdsReferencingStore } from "../products/interface/product";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
 import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 import {
   STORE_PROTECTED_FIELDS,
   STORE_IMPORTABLE_FIELDS,
   STORE_EXPORTABLE_FIELDS,
+  STORE_REQUIRED_FIELDS,
 } from "./constants/storeFieldConstants";
-import { parseCSVText } from "@/app/utils/csvUtils";
 import { exportRowsToCSV } from "@/app/utils/import";
+import { ImportCsvDialog, firstExampleRecord } from "@/components/import/ImportCsvDialog";
+import { isFileError, parseImportFile } from "@/components/import/parseImportFile";
+import type { ImportError, ImportPreview } from "@/components/import/types";
+import { classifyDocIdTarget, validateDocIdFormat } from "@/components/import/storeRefs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -189,10 +195,8 @@ export default function StoresPage() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
 
-  type ImportError = { row: number; field: string; reason: string };
-  type ImportPreview = { validRows: Record<string, string>[]; errors: ImportError[] } | null;
   const [importLoading, setImportLoading] = useState(false);
-  const [importPreview, setImportPreview] = useState<ImportPreview>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [showImportInfo, setShowImportInfo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -221,130 +225,163 @@ export default function StoresPage() {
     exportRowsToCSV(displayed, STORE_EXPORTABLE_FIELDS, "stores");
   }
 
-  function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target?.result as string;
-        const { headers, rows } = parseCSVText(text);
+  /**
+   * Builds a per-file validator. It is stateful: `claimed` tracks storeCode and
+   * printerId values used by earlier rows, so an import cannot introduce
+   * duplicates among its own rows either.
+   */
+  function makeStoreRowValidator() {
+    const existingStores = useStoreStore.getState().stores;
+    const existingStoreIds = existingStores.map((s) => s.docId);
+    const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId);
+    const claimed: Record<"storeCode" | "printerId", Map<string, number>> = {
+      storeCode: new Map(),
+      printerId: new Map(),
+    };
 
-        const protectedInFile = headers.filter((h) =>
-          (STORE_PROTECTED_FIELDS as readonly string[]).includes(h)
+    return function validateStoreRow(
+      row: Record<string, string>,
+      rowNum: number,
+    ): ImportError[] {
+      const errors: ImportError[] = [];
+      const isCreate = !row.docId;
+
+      // Format first: a wrong-entity ID gets a message naming the right section, instead
+      // of the membership check's generic "not found". A soft-deleted target is not an
+      // error — the row restores it on write. Only an unknown ID fails.
+      const docIdFormatError = validateDocIdFormat(row.docId, "stores", rowNum);
+      if (docIdFormatError) {
+        errors.push(docIdFormatError);
+      } else if (
+        !isCreate &&
+        classifyDocIdTarget(row.docId, existingStoreIds, allStoreIds) === "unknown"
+      ) {
+        errors.push({ row: rowNum, field: "docId", reason: "Store not found — cannot update" });
+      }
+
+      if (isCreate) {
+        const missing = (STORE_REQUIRED_FIELDS as readonly string[]).filter(
+          (f) => !row[f]?.trim(),
         );
-        if (protectedInFile.length > 0) {
-          toast.error(`CSV contains protected columns: ${protectedInFile.join(", ")}. Remove them and re-upload.`);
-          if (fileInputRef.current) fileInputRef.current.value = "";
+        missing.forEach((f) =>
+          errors.push({ row: rowNum, field: f, reason: `${f} is required for new stores` }),
+        );
+      }
+
+      if (row.disable !== undefined && row.disable !== "" &&
+        !["true", "false"].includes(row.disable.toLowerCase())) {
+        errors.push({ row: rowNum, field: "disable", reason: 'Must be "true" or "false"' });
+      }
+
+      if (row.location !== undefined && row.location.trim() !== "") {
+        const [lat, lng] = row.location.split(",").map((p) => p.trim());
+        if (!isValidCoordinate(lat, 90) || !isValidCoordinate(lng, 180)) {
+          errors.push({ row: rowNum, field: "location", reason: 'Must be "lat,lng" with valid coordinates' });
+        }
+      }
+
+      // Store code and printer ID must stay unique across all stores, and across
+      // the file itself. For updates the row's own store is excluded by docId;
+      // for creates there is no document to exclude yet.
+      ([
+        ["storeCode", "Store code"],
+        ["printerId", "Printer ID"],
+      ] as const).forEach(([field, label]) => {
+        const raw = row[field];
+        if (raw === undefined || raw.trim() === "") return;
+        const key = raw.trim().toLowerCase();
+
+        if (isStoreFieldTaken(existingStores, field, raw, isCreate ? undefined : row.docId)) {
+          errors.push({ row: rowNum, field, reason: `${label} "${raw}" already exists` });
           return;
         }
 
-        const existingStores = useStoreStore.getState().stores;
-        const existingStoreIds = existingStores.map((s) => s.docId);
-        const validImportCols = new Set([...(STORE_IMPORTABLE_FIELDS as readonly string[]), "docId"]);
+        const claimedBy = claimed[field].get(key);
+        if (claimedBy !== undefined) {
+          errors.push({ row: rowNum, field, reason: `${label} "${raw}" duplicates row ${claimedBy}` });
+          return;
+        }
+        claimed[field].set(key, rowNum);
+      });
 
-        const validRows: Record<string, string>[] = [];
-        const errors: ImportError[] = [];
-
-        // Values claimed by earlier rows in this file, so the import can't
-        // introduce duplicates among its own rows either.
-        const claimed: Record<"storeCode" | "printerId", Map<string, number>> = {
-          storeCode: new Map(),
-          printerId: new Map(),
-        };
-
-        rows.forEach((cols, idx) => {
-          const rowNum = idx + 2;
-          const row: Record<string, string> = {};
-          headers.forEach((h, i) => { row[h] = cols[i] ?? ""; });
-
-          headers.filter((h) => !validImportCols.has(h)).forEach((col) =>
-            errors.push({ row: rowNum, field: col, reason: `Unknown column "${col}" will be ignored` })
-          );
-
-          let hasError = false;
-
-          if (!row.docId) {
-            errors.push({ row: rowNum, field: "docId", reason: "docId is required to identify the store" });
-            hasError = true;
-          } else if (!existingStoreIds.includes(row.docId)) {
-            errors.push({ row: rowNum, field: "docId", reason: "Store not found — cannot update" });
-            hasError = true;
-          }
-
-          if (row.disable !== undefined && row.disable !== "" &&
-            !["true", "false"].includes(row.disable.toLowerCase())) {
-            errors.push({ row: rowNum, field: "disable", reason: 'Must be "true" or "false"' });
-            hasError = true;
-          }
-
-          // Store code and printer ID must stay unique across all stores, and
-          // across the file itself. The row's own store is excluded by docId.
-          ([
-            ["storeCode", "Store code"],
-            ["printerId", "Printer ID"],
-          ] as const).forEach(([field, label]) => {
-            const raw = row[field];
-            if (raw === undefined || raw.trim() === "") return;
-            const key = raw.trim().toLowerCase();
-
-            if (isStoreFieldTaken(existingStores, field, raw, row.docId)) {
-              errors.push({ row: rowNum, field, reason: `${label} "${raw}" already exists` });
-              hasError = true;
-              return;
-            }
-
-            const claimedBy = claimed[field].get(key);
-            if (claimedBy !== undefined) {
-              errors.push({ row: rowNum, field, reason: `${label} "${raw}" duplicates row ${claimedBy}` });
-              hasError = true;
-              return;
-            }
-            claimed[field].set(key, rowNum);
-          });
-
-          if (!hasError) validRows.push(row);
-        });
-
-        setImportPreview({ validRows, errors });
-      } catch {
-        toast.error("Failed to read CSV file.");
-      } finally {
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
+      return errors;
     };
-    reader.readAsText(file);
+  }
+
+  async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+
+    const result = await parseImportFile(file, {
+      protectedFields: STORE_PROTECTED_FIELDS,
+      importableFields: STORE_IMPORTABLE_FIELDS,
+      validateRow: makeStoreRowValidator(),
+    });
+
+    if (isFileError(result)) {
+      toast.error(result.fileError);
+      return;
+    }
+    setImportPreview(result);
   }
 
   async function handleConfirmImport() {
-    if (!importPreview || importPreview.validRows.length === 0) return;
+    const importable =
+      importPreview?.rows.filter((r) => r.action !== "error") ?? [];
+    if (importable.length === 0) return;
     setImportLoading(true);
     try {
-      let count = 0;
-      for (const row of importPreview.validRows) {
-        const update: Record<string, unknown> = {};
-        if (row.name !== undefined && row.name !== "") update.name = row.name;
-        if (row.address !== undefined && row.address !== "") update.address = row.address;
-        if (row.email !== undefined && row.email !== "") update.email = row.email;
-        if (row.contactNumber !== undefined && row.contactNumber !== "") update.contactNumber = row.contactNumber;
-        if (row.location !== undefined && row.location !== "") update.location = row.location;
-        if (row.imageUrl !== undefined) update.imageUrl = row.imageUrl || null;
-        if (row.gstNumber !== undefined) update.gstNumber = row.gstNumber || null;
-        if (row.invoiceText !== undefined) update.invoiceText = row.invoiceText || null;
-        if (row.storeCode !== undefined) update.storeCode = row.storeCode;
-        if (row.printerId !== undefined) update.printerId = row.printerId;
-        if (row.disable !== undefined && row.disable !== "") update.disable = row.disable.toLowerCase() === "true";
-        await StoreService.updateStore(row.docId, update);
-        count++;
+      let created = 0;
+      let updated = 0;
+      for (const { action, data: row } of importable) {
+        const data: Record<string, unknown> = {};
+        if (row.name !== undefined && row.name !== "") data.name = row.name;
+        if (row.address !== undefined && row.address !== "") data.address = row.address;
+        if (row.email !== undefined && row.email !== "") data.email = row.email;
+        if (row.contactNumber !== undefined && row.contactNumber !== "") data.contactNumber = row.contactNumber;
+        if (row.location !== undefined && row.location !== "") data.location = row.location;
+        if (row.imageUrl !== undefined) data.imageUrl = row.imageUrl || null;
+        if (row.gstNumber !== undefined) data.gstNumber = row.gstNumber || null;
+        if (row.invoiceText !== undefined) data.invoiceText = row.invoiceText || null;
+        if (row.storeCode !== undefined) data.storeCode = row.storeCode;
+        if (row.printerId !== undefined) data.printerId = row.printerId;
+        if (row.disable !== undefined && row.disable !== "") data.disable = row.disable.toLowerCase() === "true";
+
+        if (action === "update") {
+          // Clearing the soft-delete flags restores a store deleted after the CSV was
+          // exported; on a live store it is a no-op. Products it was detached from on
+          // delete are not re-attached — the delete cascade is not reversed here.
+          await StoreService.updateStore(row.docId, {
+            ...data,
+            isDeleted: false,
+            deletedAt: null,
+          });
+          updated++;
+        } else {
+          // A CSV cannot express opening hours, so new stores start closed every
+          // day on the same defaults the Create Store dialog uses. Edit the
+          // store afterwards to set real hours.
+          const openingHours: Record<string, DayHours> = Object.fromEntries(
+            DAYS.map((day) => [day, { ...defaultDayHours }]),
+          );
+          await StoreService.createStore({
+            ...data,
+            city: row.city?.trim() || null,
+            openingHours,
+            disable: data.disable ?? false,
+          } as Omit<Store, "docId">);
+          created++;
+        }
       }
       log({
         category: LOG_CATEGORY.IMPORT,
         severityLevel: LOG_SEVERITY.HIGH,
         action: "Import Stores",
-        notes: `Admin updated ${count} store${count !== 1 ? "s" : ""} via CSV`,
+        notes: `Admin created ${created} and updated ${updated} store(s) via CSV`,
         page: LOG_PAGE.STORES,
       });
-      toast.success(`Updated ${count} store${count !== 1 ? "s" : ""}.`);
+      toast.success(`Created ${created} and updated ${updated} store(s).`);
       setImportPreview(null);
     } catch {
       toast.error("Failed to import stores.");
@@ -358,8 +395,14 @@ export default function StoresPage() {
     setDeleteLoading(true);
     // Resolved before the delete — the store leaves the list once it's gone.
     const storeName = stores.find((s) => s.docId === deleteStoreId)?.name ?? deleteStoreId;
+    // Products aren't subscribed to on this page; the dashboard layout mounts the
+    // listener globally, so the store is populated by the time a delete is possible.
+    const affectedProductIds = productIdsReferencingStore(
+      useDashboardStore.getState().products,
+      deleteStoreId,
+    );
     try {
-      await StoreService.deleteStore(deleteStoreId);
+      await StoreService.deleteStoreCascade(deleteStoreId, affectedProductIds);
       log({
         category: LOG_CATEGORY.STORES,
         severityLevel: LOG_SEVERITY.HIGH,
@@ -490,14 +533,15 @@ export default function StoresPage() {
             onChange={handleImportCSV}
             className="hidden"
           />
-{/* <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowImportInfo(true)}
-            disabled={importLoading}
-          >
-            {importLoading ? "Importing…" : "Import CSV"}
-          </Button> */}
+          {isAdmin && (
+            <Button
+              variant="outline"
+              onClick={() => setShowImportInfo(true)}
+              disabled={importLoading}
+            >
+              {importLoading ? "Importing…" : "Import CSV"}
+            </Button>
+          )}
           {isAdmin && (
             <Button
               variant="outline"
@@ -865,73 +909,33 @@ export default function StoresPage() {
         </DialogContent>
       </Dialog>
 
-      {/* CSV Field Guide Dialog */}
-      <Dialog open={showImportInfo} onOpenChange={setShowImportInfo}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>CSV Import Guide — Stores</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2 text-sm">
-            <div className="space-y-1.5">
-              <p className="font-medium text-black">Editable fields</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(["name", "address", "email", "contactNumber", "location", "imageUrl", "gstNumber", "invoiceText", "storeCode", "printerId", "disable"] as const).map((f) => (
-                  <span key={f} className="rounded-md bg-background border border-border px-2 py-0.5 text-xs text-black font-mono">{f}</span>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <p className="font-medium text-black">Required fields <span className="text-xs font-normal text-light-grey">(for new rows)</span></p>
-              <p className="text-xs text-light-grey">None — every row must include an existing <span className="font-mono text-black">docId</span>.</p>
-            </div>
-            <p className="text-xs text-light-grey leading-relaxed">
-              This entity is <span className="font-medium text-black">update-only</span>. Every row must include a valid <span className="font-mono text-black">docId</span>. The <span className="font-mono text-black">disable</span> field accepts <span className="font-mono text-black">true</span> or <span className="font-mono text-black">false</span>.
+      <ImportCsvDialog
+        entityLabel="Stores"
+        idCollection="stores"
+        exampleRecord={firstExampleRecord(stores)}
+        guideOpen={showImportInfo}
+        onGuideOpenChange={setShowImportInfo}
+        guide={{
+          editable: STORE_IMPORTABLE_FIELDS,
+          required: STORE_REQUIRED_FIELDS,
+          note: (
+            <p className="text-xs leading-relaxed text-light-grey">
+              <span className="font-mono text-black">location</span> is{" "}
+              <span className="font-mono text-black">lat,lng</span>;{" "}
+              <span className="font-mono text-black">disable</span> accepts{" "}
+              <span className="font-mono text-black">true</span> or{" "}
+              <span className="font-mono text-black">false</span>. New stores are
+              created closed every day — set opening hours by editing the store
+              afterwards.
             </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImportInfo(false)}>Cancel</Button>
-            <Button onClick={() => { setShowImportInfo(false); fileInputRef.current?.click(); }}>
-              Choose File →
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Import Preview Dialog */}
-      <Dialog open={importPreview !== null} onOpenChange={() => setImportPreview(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Import Preview</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {importPreview && importPreview.errors.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium text-black">Errors</p>
-                <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-background p-3 space-y-1">
-                  {importPreview.errors.map((e, i) => (
-                    <p key={i} className="text-xs text-black">
-                      <span className="font-medium">Row {e.row}</span> — {e.field}: {e.reason}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-sm text-black">
-              <span className="font-medium">{importPreview?.validRows.length ?? 0}</span> row(s) will be updated.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportPreview(null)} disabled={importLoading}>
-              Cancel
-            </Button>
-            {(importPreview?.validRows.length ?? 0) > 0 && (
-              <Button onClick={handleConfirmImport} disabled={importLoading}>
-                {importLoading ? "Updating…" : `Update ${importPreview?.validRows.length} row(s)`}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          ),
+        }}
+        onChooseFile={() => fileInputRef.current?.click()}
+        preview={importPreview}
+        onPreviewClose={() => setImportPreview(null)}
+        loading={importLoading}
+        onConfirm={handleConfirmImport}
+      />
     </div>
   );
 }

@@ -30,19 +30,54 @@ export function parseArrayCell(raw: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Split one CSV line into fields on top-level commas. Commas inside quotes are
+ * part of the value, and a doubled `""` inside a quoted field is a literal quote.
+ * Always returns one more field than there are top-level commas, so a row zips
+ * positionally against its header row.
+ */
 export function parseCSVLine(line: string): string[] {
-  return (
-    line
-      .match(/("(?:[^"]|"")*"|[^,]*)/g)
-      ?.map((c) => c.replace(/^"|"$/g, "").replace(/""/g, '"')) ?? []
-  );
+  const source = line.endsWith("\r") ? line.slice(0, -1) : line;
+  const fields: string[] = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        // A second quote escapes it; otherwise the quoted section ends here.
+        if (source[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ",") {
+      fields.push(field);
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+
+  fields.push(field);
+  return fields;
 }
 
 export function parseCSVText(text: string): {
   headers: string[];
   rows: string[][];
 } {
-  const lines = text.split("\n").filter((l) => l.trim());
+  const lines = text
+    .split(/\r?\n/)
+    .filter((l) => l.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
   const headers = parseCSVLine(lines[0]);
   const rows = lines.slice(1).map((l) => parseCSVLine(l));
