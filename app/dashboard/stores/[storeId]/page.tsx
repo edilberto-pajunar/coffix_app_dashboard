@@ -324,6 +324,9 @@ export default function StoreDetailPage() {
 
     // Exclude this store so unchanged values don't collide with themselves.
     const dupErrors: FieldErrors = {};
+    if (isStoreFieldTaken(stores, "name", form.name, store.docId)) {
+      dupErrors.name = "This store name is already in use.";
+    }
     if (isStoreFieldTaken(stores, "storeCode", form.storeCode, store.docId)) {
       dupErrors.storeCode = "This store code is already in use.";
     }
@@ -332,7 +335,7 @@ export default function StoreDetailPage() {
     }
     if (Object.keys(dupErrors).length > 0) {
       setErrors(dupErrors);
-      toast.error("Store code and printer ID must be unique.");
+      toast.error("Name, store code, and printer ID must be unique.");
       return;
     }
 

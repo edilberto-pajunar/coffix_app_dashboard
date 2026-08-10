@@ -60,7 +60,7 @@ export function isValidCoordinate(value: string, limit: 90 | 180): boolean {
  */
 export function isStoreFieldTaken(
   stores: Store[],
-  field: "storeCode" | "printerId",
+  field: "storeCode" | "printerId" | "name",
   value: string,
   excludeDocId?: string,
 ): boolean {

@@ -451,6 +451,9 @@ export default function StoresPage() {
     // Validate against every store, not the role-filtered list — a store manager
     // sees only their assigned stores and would miss collisions outside that scope.
     const dupErrors: FieldErrors = {};
+    if (isStoreFieldTaken(allStores, "name", form.name)) {
+      dupErrors.name = "This store name is already in use.";
+    }
     if (isStoreFieldTaken(allStores, "storeCode", form.storeCode)) {
       dupErrors.storeCode = "This store code is already in use.";
     }
@@ -459,7 +462,7 @@ export default function StoresPage() {
     }
     if (Object.keys(dupErrors).length > 0) {
       setErrors(dupErrors);
-      toast.error("Store code and printer ID must be unique.");
+      toast.error("Name, store code, and printer ID must be unique.");
       return;
     }
 

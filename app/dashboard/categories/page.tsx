@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
-import { Category } from "../products/interface/category";
+import { Category, isCategoryNameTaken, productIdsReferencingCategory } from "../products/interface/category";
 import { formatDocId } from "@/app/utils/formatting";
 import {
   CATEGORY_PROTECTED_FIELDS,
@@ -32,6 +32,7 @@ import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConst
 
 export default function CategoriesPage() {
   const categories = useDashboardStore((s) => s.categories);
+  const products = useDashboardStore((s) => s.products);
   const { currentStaff } = useAuth();
   const isAdmin = currentStaff?.role === "admin";
   const { log } = useActivityLog();
@@ -64,7 +65,7 @@ export default function CategoriesPage() {
   const [categoryDialog, setCategoryDialog] = useState<"create" | "edit" | "delete" | null>(null);
   const [categoryForm, setCategoryForm] = useState({ name: "" });
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
-  const [categoryErrors, setCategoryErrors] = useState<{ name?: boolean }>({});
+  const [categoryErrors, setCategoryErrors] = useState<{ name?: boolean; nameMessage?: string }>({});
   const [categoryLoading, setCategoryLoading] = useState(false);
 
   const [importLoading, setImportLoading] = useState(false);
@@ -72,9 +73,15 @@ export default function CategoriesPage() {
   const [showImportInfo, setShowImportInfo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const productsUsingCategory = useMemo(
+    () => products.filter((p) => p.categoryId === activeCategoryId),
+    [products, activeCategoryId],
+  );
+
   function openEdit(docId: string, name: string) {
     setActiveCategoryId(docId);
     setCategoryForm({ name: name ?? "" });
+    setCategoryErrors({});
     setCategoryDialog("edit");
   }
 
@@ -94,7 +101,18 @@ export default function CategoriesPage() {
 
   async function handleSaveCategory() {
     if (!categoryForm.name.trim()) {
-      setCategoryErrors({ name: true });
+      setCategoryErrors({ name: true, nameMessage: "Name is required." });
+      return;
+    }
+    if (
+      isCategoryNameTaken(
+        categories,
+        categoryForm.name,
+        categoryDialog === "edit" ? (activeCategoryId ?? undefined) : undefined,
+      )
+    ) {
+      setCategoryErrors({ name: true, nameMessage: "This category name is already in use." });
+      toast.error("This category name is already in use.");
       return;
     }
     setCategoryErrors({});
@@ -310,13 +328,14 @@ export default function CategoriesPage() {
           <thead>
             <tr className="border-b border-border bg-background">
               <th className="px-5 py-3 text-left font-medium text-light-grey">Name</th>
+              <th className="px-5 py-3 text-left font-medium text-light-grey">Products</th>
               <th className="px-5 py-3 text-right font-medium text-light-grey">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {displayed.length === 0 ? (
               <tr>
-                <td colSpan={2} className="px-5 py-10 text-center text-light-grey">
+                <td colSpan={3} className="px-5 py-10 text-center text-light-grey">
                   No categories found.
                 </td>
               </tr>
@@ -343,6 +362,9 @@ export default function CategoriesPage() {
                       </svg>
                       <span className="font-medium text-black">{c.name ?? "—"}</span>
                     </div>
+                  </td>
+                  <td className="px-5 py-3 text-black">
+                    {productIdsReferencingCategory(products, c.docId ?? "").length}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex justify-end gap-1">
@@ -414,7 +436,7 @@ export default function CategoriesPage() {
                 }}
               />
               {categoryErrors.name && (
-                <p className="mt-1 text-xs text-error">Name is required.</p>
+                <p className="mt-1 text-xs text-error">{categoryErrors.nameMessage ?? "Name is required."}</p>
               )}
             </div>
           </div>
@@ -451,6 +473,20 @@ export default function CategoriesPage() {
           <p className="text-sm text-muted-foreground">
             Are you sure you want to delete this category? This action cannot be undone.
           </p>
+
+          {productsUsingCategory.length > 0 && (
+            <div className="rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
+              <p className="text-xs font-medium text-error">
+                ⚠ Used by {productsUsingCategory.length} product
+                {productsUsingCategory.length !== 1 ? "s" : ""}
+              </p>
+              <p className="mt-1 text-xs text-light-grey">
+                These products will keep this category unless reassigned:{" "}
+                {productsUsingCategory.slice(0, 5).map((p) => p.name ?? "Unnamed").join(", ")}
+                {productsUsingCategory.length > 5 ? `, +${productsUsingCategory.length - 5} more` : ""}.
+              </p>
+            </div>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setCategoryDialog(null)}>

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "../../products/store/useDashboardStore";
 import { Modifier } from "../../products/interface/modifier";
+import { isModifierGroupNameTaken } from "../../products/interface/modifierGroup";
 import { ProductService } from "../../products/service/ProductService";
 import { formatCurrencyInput } from "@/app/utils/formatting";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,13 @@ export default function ModifierGroupDetailPage() {
       return;
     }
     if (!group?.docId) return;
+
+    if (isModifierGroupNameTaken(modifierGroups, groupForm.name, group.docId)) {
+      setGroupErrors({ name: true });
+      toast.error(`A modifier group named "${groupForm.name.trim()}" already exists.`);
+      return;
+    }
+
     setLoading(true);
     try {
       await ProductService.updateModifierGroup(group.docId, {

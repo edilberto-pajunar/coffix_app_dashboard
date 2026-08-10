@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { endOfDayNZ } from "@/app/utils/formatting";
 
 interface Store {
   docId?: string;
@@ -89,8 +90,8 @@ export function AddCouponDialog({ open, onClose, stores, defaultEmails }: AddCou
       } = {
         type: form.type.trim(),
         amount: amt,
-        // Always 11:59 PM (Asia/Manila) of the selected date, regardless of the date chosen.
-        expiryDate: `${form.expiryDate}T23:59:59+08:00`,
+        // Always 11:59 PM NZ time of the selected date, matching the dashboard's display timezone.
+        expiryDate: endOfDayNZ(form.expiryDate).toISOString(),
         customerEmail: customerEmails,
       };
       if (form.storeId) payload.storeId = form.storeId;

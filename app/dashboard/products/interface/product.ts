@@ -34,3 +34,20 @@ export function productIdsReferencingStore(
     .map((p) => p.docId)
     .filter((id): id is string => Boolean(id));
 }
+
+/**
+ * True when another product already uses this name.
+ * Matching is case-insensitive and ignores surrounding whitespace.
+ * Pass `excludeDocId` when editing so a product doesn't collide with itself.
+ */
+export function isProductNameTaken(
+  products: readonly Product[],
+  name: string,
+  excludeDocId?: string,
+): boolean {
+  const target = name.trim().toLowerCase();
+  if (target === "") return false;
+  return products.some(
+    (p) => p.docId !== excludeDocId && (p.name ?? "").trim().toLowerCase() === target,
+  );
+}

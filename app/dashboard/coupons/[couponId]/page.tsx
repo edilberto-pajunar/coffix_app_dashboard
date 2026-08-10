@@ -7,7 +7,7 @@ import { useCouponStore } from "../store/useCouponStore";
 import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 import { CouponService } from "../service/CouponService";
 import { Coupon } from "../interface/coupon";
-import { formatDate, formatDateTime } from "@/app/utils/formatting";
+import { formatDateTime, toNZDateInputValue, endOfDayNZ } from "@/app/utils/formatting";
 import { Button } from "@/components/ui/button";
 
 // ─── Display components ───────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ export default function CouponDetailPage() {
       type: ["referral", "admin"].includes(coupon!.type ?? "") ? coupon!.type! : "referral",
       amount: (coupon!.amount ?? "").toString(),
       remainingAmount: (coupon!.remainingAmount ?? coupon!.amount ?? 0).toString(),
-      expiryDate: formatDate(coupon!.expiryDate),
+      expiryDate: toNZDateInputValue(coupon!.expiryDate),
       notes: coupon!.notes ?? "",
       storeId: coupon!.storeId ?? "",
     });
@@ -108,7 +108,7 @@ export default function CouponDetailPage() {
       const remainingAmount = parseFloat(form.remainingAmount);
       if (!isNaN(remainingAmount) && remainingAmount >= 0) data.remainingAmount = remainingAmount;
       if (form.expiryDate) {
-        const d = new Date(form.expiryDate + "T00:00:00");
+        const d = endOfDayNZ(form.expiryDate);
         if (!isNaN(d.getTime())) data.expiryDate = d;
       }
       if (form.notes.trim()) data.notes = form.notes.trim();

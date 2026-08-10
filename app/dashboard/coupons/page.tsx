@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CouponsFilterBar } from "./components/CouponsFilterBar";
 import { AddCouponDialog } from "./components/AddCouponDialog";
-import { formatDateTime } from "@/app/utils/formatting";
+import { formatDateTime, endOfDayNZ } from "@/app/utils/formatting";
 import { useActivityLog } from "../logs/hooks/useActivityLog";
 import { LOG_CATEGORY, LOG_PAGE, LOG_SEVERITY } from "../logs/constants/logConstants";
 
@@ -186,7 +186,7 @@ export default function CouponsPage() {
 
   async function handleBulkExpiry() {
     if (!bulkExpiry) { toast.error("Select a date."); return; }
-    const date = new Date(bulkExpiry + "T00:00:00");
+    const date = endOfDayNZ(bulkExpiry);
     setBulkLoading(true);
     try {
       await Promise.all(

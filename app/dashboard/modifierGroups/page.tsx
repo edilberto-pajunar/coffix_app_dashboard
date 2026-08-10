@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
+import { isModifierGroupNameTaken } from "../products/interface/modifierGroup";
 import { Button } from "@/components/ui/button";
 import { exportRowsToCSV } from "@/app/utils/import";
 import {
@@ -110,6 +111,12 @@ export default function ModifierGroupsPage() {
         if (Object.values(newErrors).some(Boolean)) {
             setErrors(newErrors);
             toast.error("Please fill in all required fields.");
+            return;
+        }
+
+        if (isModifierGroupNameTaken(modifierGroups, form.name)) {
+            setErrors({ name: true });
+            toast.error(`A modifier group named "${form.name.trim()}" already exists.`);
             return;
         }
 

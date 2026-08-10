@@ -82,6 +82,36 @@ export const formatDate = (value: unknown): string => {
   return `${day}/${month}/${year}`;
 };
 
+// Same calendar date as formatDate, but in the yyyy-MM-dd shape required by
+// <input type="date">.
+export const toNZDateInputValue = (value: unknown): string => {
+  const date = toDateSafe(value);
+  if (!date) return "";
+  const { day, month, year } = nzParts(date);
+  return `${year}-${month}-${day}`;
+};
+
+// Converts a yyyy-MM-dd date-input string into the Date instant representing
+// 23:59:59.999 in NZ time on that calendar date, matching the timezone every
+// other formatter in this file uses for display.
+export const endOfDayNZ = (dateStr: string): Date => {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  // Start from the instant that is that calendar date at UTC midnight, then
+  // find the NZ UTC offset that applies around it and adjust.
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  const offsetParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: NZ_TIME_ZONE,
+    timeZoneName: "shortOffset",
+  }).formatToParts(utcGuess);
+  const offsetLabel = offsetParts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+12";
+  const match = offsetLabel.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  const sign = match?.[1] === "-" ? -1 : 1;
+  const offsetHours = match ? Number(match[2]) : 12;
+  const offsetMinutes = match?.[3] ? Number(match[3]) : 0;
+  const offsetMs = sign * (offsetHours * 60 + offsetMinutes) * 60 * 1000;
+  return new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - offsetMs);
+};
+
 
 
 export const formatTime = (value: unknown): string => {

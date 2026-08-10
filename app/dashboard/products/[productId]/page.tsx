@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { useStoreStore } from "../../stores/store/useStoreStore";
 import { useAuth } from "@/app/lib/AuthContext";
-import { Product } from "../interface/product";
+import { Product, isProductNameTaken } from "../interface/product";
 import { ProductService } from "../service/ProductService";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,7 @@ export default function ProductDetailPage() {
 
     const [dialog, setDialog] = useState<DialogMode>(null);
     const [productForm, setProductForm] = useState<Partial<Product>>({});
+    const [errors, setErrors] = useState<{ name?: boolean }>({});
     const [priceStr, setPriceStr] = useState<string>("0.00");
     const [costStr, setCostStr] = useState<string>("0.00");
     const [selectedGroupId, setSelectedGroupId] = useState<string>("");
@@ -183,6 +184,7 @@ export default function ProductDetailPage() {
         setProductForm(p);
         setPriceStr(((p.price ?? 0) as number).toFixed(2));
         setCostStr(((p.cost ?? 0) as number).toFixed(2));
+        setErrors({});
         setDialog("edit-product");
     }
 
@@ -194,6 +196,20 @@ export default function ProductDetailPage() {
 
     async function handleUpdateProduct() {
         if (!product?.docId) return;
+
+        if (!(productForm.name ?? "").trim()) {
+            setErrors({ name: true });
+            toast.error("Name is required.");
+            return;
+        }
+
+        if (isProductNameTaken(useDashboardStore.getState().allProducts, productForm.name ?? "", product.docId)) {
+            setErrors({ name: true });
+            toast.error(`A product named "${(productForm.name ?? "").trim()}" already exists.`);
+            return;
+        }
+
+        setErrors({});
         setLoading(true);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { docId: _, ...rest } = productForm as Product;
@@ -515,10 +531,14 @@ export default function ProductDetailPage() {
                                     <div>
                                         <label className="mb-1 block text-xs text-black capitalize">name</label>
                                         <input
-                                            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                            className={`w-full rounded-lg border px-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.name ? "border-error" : "border-border"}`}
                                             value={(productForm.name as string) ?? ""}
-                                            onChange={(e) => setProductForm((f) => ({ ...f, name: e.target.value }))}
+                                            onChange={(e) => {
+                                                setProductForm((f) => ({ ...f, name: e.target.value }));
+                                                setErrors((err) => ({ ...err, name: false }));
+                                            }}
                                         />
+                                        {errors.name && <p className="mt-1 text-xs text-error">Name is required and must be unique.</p>}
                                     </div>
                                     <div>
                                         <label className="mb-1 block text-xs text-black capitalize">Category</label>

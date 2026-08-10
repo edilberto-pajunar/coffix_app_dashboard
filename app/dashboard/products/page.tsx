@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useDashboardStore } from "./store/useDashboardStore";
 import { useProductSortStore } from "./store/useProductSortStore";
 import { useStoreStore } from "../stores/store/useStoreStore";
-import { Product } from "./interface/product";
+import { Product, isProductNameTaken } from "./interface/product";
 import { ProductService } from "./service/ProductService";
 import {
   PRODUCT_PROTECTED_FIELDS,
@@ -369,9 +369,17 @@ export default function ProductsPage() {
   async function handleCopyProduct(product: Product) {
     try {
       const { docId, ...rest } = product;
+      const allProducts = useDashboardStore.getState().allProducts;
+      const baseName = `Copy of ${product.name ?? ""}`;
+      let copyName = baseName;
+      let suffix = 2;
+      while (isProductNameTaken(allProducts, copyName)) {
+        copyName = `${baseName} (${suffix})`;
+        suffix += 1;
+      }
       await ProductService.createProduct({
         ...rest,
-        name: `Copy of ${product.name ?? ""}`,
+        name: copyName,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -461,6 +469,8 @@ export default function ProductsPage() {
     if (!row.docId) {
       if (!(PRODUCT_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
         errors.push({ row: rowNum, field: "name", reason: "name is required for new products" });
+      } else if (isProductNameTaken(useDashboardStore.getState().allProducts, row.name)) {
+        errors.push({ row: rowNum, field: "name", reason: `Product "${row.name}" already exists` });
       }
     }
 
@@ -599,6 +609,12 @@ export default function ProductsPage() {
     if (Object.values(newErrors).some(Boolean)) {
       setErrors(newErrors);
       toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    if (isProductNameTaken(useDashboardStore.getState().allProducts, form.name)) {
+      setErrors({ ...newErrors, name: true });
+      toast.error(`A product named "${form.name.trim()}" already exists.`);
       return;
     }
 
