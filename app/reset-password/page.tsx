@@ -59,12 +59,16 @@ function ResetPasswordContent() {
     e.preventDefault();
     setFieldError("");
 
-    if (password.length < 7) {
-      setFieldError("Password must be more than 6 characters.");
+    if (password.length < 6) {
+      setFieldError("Password must be at least 6 characters.");
       return;
     }
     if (!/[A-Z]/.test(password)) {
       setFieldError("Password must contain at least one uppercase letter.");
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setFieldError("Password must contain at least one lowercase letter.");
       return;
     }
     if (!/[0-9]/.test(password)) {
