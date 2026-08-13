@@ -12,6 +12,10 @@
  *   - `default`   the write-time default. Applied by the backend, NOT the client parser.
  *   - `system`    identity/managed field (e.g. `id`) — never validated as user data.
  *
+ * Per collection, `unique` lists the fields that must not repeat — checked both between
+ * rows of the same file and against the records already in Firestore. Matching is
+ * case-insensitive and trims whitespace; blank values never collide.
+ *
  * Dotted keys (e.g. "openingHours.monday.open", "card.cardNumber", "template.body")
  * are expanded into nested objects by the parser.
  */
@@ -34,6 +38,8 @@ export interface FieldSpec {
 
 export interface CollectionSchema {
   fields: Record<string, FieldSpec>;
+  /** Fields that must be unique within the file and against existing records. */
+  unique?: string[];
 }
 
 export const importSchemas = {
@@ -45,6 +51,7 @@ export const importSchemas = {
       modifierIds: { required: false, type: "array" },
       name: { required: true, type: "string" },
     },
+    unique: ["name"],
   },
   modifiers: {
     fields: {
@@ -56,6 +63,8 @@ export const importSchemas = {
       modifierCode: { required: false, type: "string" },
       priceDelta: { required: false, type: "number" },
     },
+    // Modifiers have no `name` — `label` is the display field.
+    unique: ["label"],
   },
   productCategories: {
     fields: {
@@ -64,6 +73,7 @@ export const importSchemas = {
       name: { required: true, type: "string" },
       order: { required: false, type: "number" },
     },
+    unique: ["name"],
   },
   products: {
     fields: {
@@ -82,6 +92,7 @@ export const importSchemas = {
       price: { required: true, type: "number" },
       updatedAt: { default: () => new Date() },
     },
+    unique: ["name"],
   },
   stores: {
     fields: {
@@ -122,6 +133,7 @@ export const importSchemas = {
       storeCode: { required: false, type: "string" },
       updatedAt: { default: () => new Date() },
     },
+    unique: ["name", "storeCode", "printerId"],
   },
 } satisfies Record<string, CollectionSchema>;
 

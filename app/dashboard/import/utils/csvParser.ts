@@ -15,6 +15,29 @@ export interface RowError {
   message: string;
 }
 
+/**
+ * An already-stored record to check the file's unique fields against. Only `docId` is read
+ * by name; unique fields are looked up dynamically. Callers pass live
+ * Product/Store/Category/... objects, which are plain interfaces with no index signature,
+ * so this stays structural rather than requiring one.
+ */
+export interface ExistingRecord {
+  docId?: string;
+}
+
+/** Where a value already in use came from — an existing record, or an earlier CSV row. */
+type UniqueOwner = { docId?: string; row?: number };
+
+/** Unique matching ignores case and surrounding whitespace, as the dashboard forms do. */
+function normalizeKey(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+/** Read a dynamically-named field off a record whose type has no index signature. */
+function fieldValue(record: ExistingRecord, field: string): unknown {
+  return (record as Record<string, unknown>)[field];
+}
+
 export interface ParseResult<T> {
   creates: T[];
   updates: T[];
@@ -93,6 +116,7 @@ function coerce(key: string, val: string, spec: FieldSpec): { value: any } | { e
 export function parseCSV<T extends Record<string, any>>(
   csvText: string,
   collection: CollectionKey,
+  existing: readonly ExistingRecord[] = [],
 ): ParseResult<T> {
   const result = Papa.parse<Record<string, string>>(csvText, {
     header: true,
@@ -120,6 +144,22 @@ export function parseCSV<T extends Record<string, any>>(
   const creates: T[] = [];
   const updates: T[] = [];
   const errors: RowError[] = [];
+
+  // unique field -> normalized value -> who holds it. Seeded from the stored records so a
+  // clash with the database and a clash with an earlier row are the same lookup.
+  const uniqueFields = schemas[collection].unique ?? [];
+  const taken = new Map<string, Map<string, UniqueOwner>>();
+  for (const field of uniqueFields) {
+    const byValue = new Map<string, UniqueOwner>();
+    for (const record of existing) {
+      const key = normalizeKey(fieldValue(record, field));
+      // Blank values are not a claim on the field — two stores without a printerId
+      // must not read as duplicates of each other.
+      if (!key || byValue.has(key)) continue;
+      byValue.set(key, { docId: record.docId });
+    }
+    taken.set(field, byValue);
+  }
 
   result.data.forEach((rawRow, idx) => {
     const rowNum = idx + 2; // 1-based, +1 for header
@@ -152,12 +192,37 @@ export function parseCSV<T extends Record<string, any>>(
       setNested(row, key, res.value);
     }
 
+    const docId = rawRow["docId"]?.trim() ?? "";
+
+    // Runs before the early-return below so a row with both a bad number and a duplicate
+    // name reports the two together instead of hiding one behind the other.
+    for (const field of uniqueFields) {
+      const byValue = taken.get(field)!;
+      const value = rawRow[field]?.trim() ?? "";
+      const key = normalizeKey(value);
+      if (!key) continue;
+
+      const owner = byValue.get(key);
+      // An update row matching its own stored record is not a collision — the same job
+      // `excludeDocId` does in the dashboard's is*NameTaken predicates.
+      if (owner && !(docId && owner.docId === docId)) {
+        rowErrors.push(
+          owner.row != null
+            ? `"${field}" must be unique — "${value}" is already used on row ${owner.row}`
+            : `"${field}" must be unique — "${value}" already exists`,
+        );
+        continue;
+      }
+      // Claimed only when it was free, so the first row to use a value keeps it and each
+      // later duplicate is reported against that first row.
+      if (!owner) byValue.set(key, { row: rowNum, docId: docId || undefined });
+    }
+
     if (rowErrors.length) {
       errors.push({ row: rowNum, message: rowErrors.join("; ") });
       return;
     }
 
-    const docId = rawRow["docId"]?.trim() ?? "";
     if (docId) {
       // Catches a file uploaded under the wrong collection before it reaches the
       // backend, which would otherwise be the first thing to notice. This page renders

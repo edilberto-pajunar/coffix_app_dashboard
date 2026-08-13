@@ -369,11 +369,11 @@ export default function ProductsPage() {
   async function handleCopyProduct(product: Product) {
     try {
       const { docId, ...rest } = product;
-      const allProducts = useDashboardStore.getState().allProducts;
+      const liveProducts = useDashboardStore.getState().products;
       const baseName = `Copy of ${product.name ?? ""}`;
       let copyName = baseName;
       let suffix = 2;
-      while (isProductNameTaken(allProducts, copyName)) {
+      while (isProductNameTaken(liveProducts, copyName)) {
         copyName = `${baseName} (${suffix})`;
         suffix += 1;
       }
@@ -443,79 +443,103 @@ export default function ProductsPage() {
     exportRowsToCSV(filtered, PRODUCT_EXPORTABLE_FIELDS, "products");
   }
 
-  function validateProductRow(row: Record<string, string>, rowNum: number): ImportError[] {
-    const errors: ImportError[] = [];
-    const existingProductIds = useDashboardStore.getState().products.map((p) => p.docId!);
-    const allProductIds = useDashboardStore.getState().allProducts.map((p) => p.docId!);
-    const existingCategoryIds = useDashboardStore.getState().categories.map((c) => c.docId!);
-    const existingStoreIds = useStoreStore.getState().stores.map((s) => s.docId);
-    const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId);
-    const existingModifierGroupIds = useDashboardStore.getState().modifierGroups.map((g) => g.docId!);
-    const allModifierGroupIds = useDashboardStore.getState().allModifierGroups.map((g) => g.docId!);
+  /**
+   * Returns a fresh validator per import. Names claimed by earlier rows are held in
+   * the closure, so a file cannot introduce duplicates among its own rows — the
+   * database check alone would pass every row and then write the collision.
+   */
+  function makeProductRowValidator() {
+    const claimedNames = new Map<string, number>();
 
-    // Format first: a wrong-entity ID gets a message naming the right section, instead
-    // of the membership check's generic "not found". A soft-deleted target is not an
-    // error — the row restores it on write. Only an unknown ID fails.
-    const docIdFormatError = validateDocIdFormat(row.docId, "products", rowNum);
-    if (docIdFormatError) {
-      errors.push(docIdFormatError);
-    } else if (
-      row.docId &&
-      classifyDocIdTarget(row.docId, existingProductIds, allProductIds) === "unknown"
-    ) {
-      errors.push({ row: rowNum, field: "docId", reason: "Product not found — cannot update" });
-    }
+    return function validateProductRow(
+      row: Record<string, string>,
+      rowNum: number,
+    ): ImportError[] {
+      const errors: ImportError[] = [];
+      const existingProductIds = useDashboardStore.getState().products.map((p) => p.docId!);
+      const allProductIds = useDashboardStore.getState().allProducts.map((p) => p.docId!);
+      const existingCategoryIds = useDashboardStore.getState().categories.map((c) => c.docId!);
+      const existingStoreIds = useStoreStore.getState().stores.map((s) => s.docId);
+      const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId);
+      const existingModifierGroupIds = useDashboardStore.getState().modifierGroups.map((g) => g.docId!);
+      const allModifierGroupIds = useDashboardStore.getState().allModifierGroups.map((g) => g.docId!);
 
-    if (!row.docId) {
-      if (!(PRODUCT_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
-        errors.push({ row: rowNum, field: "name", reason: "name is required for new products" });
-      } else if (isProductNameTaken(useDashboardStore.getState().allProducts, row.name)) {
-        errors.push({ row: rowNum, field: "name", reason: `Product "${row.name}" already exists` });
+      // Format first: a wrong-entity ID gets a message naming the right section, instead
+      // of the membership check's generic "not found". A soft-deleted target is not an
+      // error — the row restores it on write. Only an unknown ID fails.
+      const docIdFormatError = validateDocIdFormat(row.docId, "products", rowNum);
+      if (docIdFormatError) {
+        errors.push(docIdFormatError);
+      } else if (
+        row.docId &&
+        classifyDocIdTarget(row.docId, existingProductIds, allProductIds) === "unknown"
+      ) {
+        errors.push({ row: rowNum, field: "docId", reason: "Product not found — cannot update" });
       }
-    }
 
-    (["price", "cost"] as const).forEach((field) => {
-      if (row[field] !== undefined && row[field] !== "") {
-        const v = parseFloat(row[field]);
-        if (isNaN(v) || v < 0) {
-          errors.push({ row: rowNum, field, reason: "Must be a valid non-negative number" });
+      if (!row.docId) {
+        if (!(PRODUCT_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
+          errors.push({ row: rowNum, field: "name", reason: "name is required for new products" });
+        } else if (isProductNameTaken(useDashboardStore.getState().products, row.name)) {
+          errors.push({ row: rowNum, field: "name", reason: `Product "${row.name}" already exists` });
+        } else {
+          const key = row.name.trim().toLowerCase();
+          const claimedBy = claimedNames.get(key);
+          if (claimedBy !== undefined) {
+            errors.push({
+              row: rowNum,
+              field: "name",
+              reason: `Product "${row.name}" duplicates row ${claimedBy}`,
+            });
+          } else {
+            claimedNames.set(key, rowNum);
+          }
         }
       }
-    });
 
-    if (row.order !== undefined && row.order !== "") {
-      if (isNaN(parseInt(row.order))) {
-        errors.push({ row: rowNum, field: "order", reason: "Must be a valid integer" });
+      (["price", "cost"] as const).forEach((field) => {
+        if (row[field] !== undefined && row[field] !== "") {
+          const v = parseFloat(row[field]);
+          if (isNaN(v) || v < 0) {
+            errors.push({ row: rowNum, field, reason: "Must be a valid non-negative number" });
+          }
+        }
+      });
+
+      if (row.order !== undefined && row.order !== "") {
+        if (isNaN(parseInt(row.order))) {
+          errors.push({ row: rowNum, field: "order", reason: "Must be a valid integer" });
+        }
       }
-    }
 
-    if (row.categoryId && !existingCategoryIds.includes(row.categoryId)) {
-      errors.push({ row: rowNum, field: "categoryId", reason: `Category "${row.categoryId}" not found` });
-    }
-
-    // Soft-deleted references are dropped on write rather than failing the row, so
-    // only genuinely unknown IDs are errors here. See buildStoreList below.
-    if (row.modifierGroupIds) {
-      const { unknown } = partitionIdCell(
-        row.modifierGroupIds,
-        existingModifierGroupIds,
-        allModifierGroupIds,
-      );
-      if (unknown.length > 0) {
-        errors.push({ row: rowNum, field: "modifierGroupIds", reason: `Unknown modifier group IDs: ${unknown.join(", ")}` });
+      if (row.categoryId && !existingCategoryIds.includes(row.categoryId)) {
+        errors.push({ row: rowNum, field: "categoryId", reason: `Category "${row.categoryId}" not found` });
       }
-    }
 
-    (["availableToStores", "disabledStores"] as const).forEach((field) => {
-      if (row[field]) {
-        const { unknown } = partitionIdCell(row[field], existingStoreIds, allStoreIds);
+      // Soft-deleted references are dropped on write rather than failing the row, so
+      // only genuinely unknown IDs are errors here. See buildStoreList below.
+      if (row.modifierGroupIds) {
+        const { unknown } = partitionIdCell(
+          row.modifierGroupIds,
+          existingModifierGroupIds,
+          allModifierGroupIds,
+        );
         if (unknown.length > 0) {
-          errors.push({ row: rowNum, field, reason: `Unknown store IDs: ${unknown.join(", ")}` });
+          errors.push({ row: rowNum, field: "modifierGroupIds", reason: `Unknown modifier group IDs: ${unknown.join(", ")}` });
         }
       }
-    });
 
-    return errors;
+      (["availableToStores", "disabledStores"] as const).forEach((field) => {
+        if (row[field]) {
+          const { unknown } = partitionIdCell(row[field], existingStoreIds, allStoreIds);
+          if (unknown.length > 0) {
+            errors.push({ row: rowNum, field, reason: `Unknown store IDs: ${unknown.join(", ")}` });
+          }
+        }
+      });
+
+      return errors;
+    };
   }
 
   async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
@@ -526,7 +550,7 @@ export default function ProductsPage() {
     const result = await parseImportFile(file, {
       protectedFields: PRODUCT_PROTECTED_FIELDS,
       importableFields: PRODUCT_IMPORTABLE_FIELDS,
-      validateRow: validateProductRow,
+      validateRow: makeProductRowValidator(),
     });
 
     if (isFileError(result)) {
@@ -612,7 +636,7 @@ export default function ProductsPage() {
       return;
     }
 
-    if (isProductNameTaken(useDashboardStore.getState().allProducts, form.name)) {
+    if (isProductNameTaken(useDashboardStore.getState().products, form.name)) {
       setErrors({ ...newErrors, name: true });
       toast.error(`A product named "${form.name.trim()}" already exists.`);
       return;

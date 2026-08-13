@@ -203,7 +203,7 @@ export default function ProductDetailPage() {
             return;
         }
 
-        if (isProductNameTaken(useDashboardStore.getState().allProducts, productForm.name ?? "", product.docId)) {
+        if (isProductNameTaken(useDashboardStore.getState().products, productForm.name ?? "", product.docId)) {
             setErrors({ name: true });
             toast.error(`A product named "${(productForm.name ?? "").trim()}" already exists.`);
             return;

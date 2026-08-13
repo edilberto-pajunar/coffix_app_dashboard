@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { useDashboardStore } from "../products/store/useDashboardStore";
 import { ProductService } from "../products/service/ProductService";
 import { Category, isCategoryNameTaken, productIdsReferencingCategory } from "../products/interface/category";
-import { formatDocId } from "@/app/utils/formatting";
 import {
   CATEGORY_PROTECTED_FIELDS,
   CATEGORY_IMPORTABLE_FIELDS,
@@ -179,39 +178,62 @@ export default function CategoriesPage() {
     exportRowsToCSV(orderedCategories, CATEGORY_EXPORTABLE_FIELDS, "categories");
   }
 
-  function validateCategoryRow(row: Record<string, string>, rowNum: number): ImportError[] {
-    const errors: ImportError[] = [];
-    const existing = useDashboardStore.getState().categories;
-    const existingCategoryIds = existing.map((c) => c.docId!);
-    const allCategoryIds = useDashboardStore.getState().allCategories.map((c) => c.docId!);
-    const existingCategoryNames = existing.map((c) => formatDocId(c.name ?? ""));
+  /**
+   * Returns a fresh validator per import. Names claimed by earlier rows are held in
+   * the closure, so a file cannot introduce duplicates among its own rows — the
+   * database check alone would pass every row and then write the collision.
+   */
+  function makeCategoryRowValidator() {
+    const claimedNames = new Map<string, number>();
 
-    // Format first: a wrong-entity ID gets a message naming the right section, instead
-    // of the membership check's generic "not found". A soft-deleted target is not an
-    // error — the row restores it on write. Only an unknown ID fails.
-    const docIdFormatError = validateDocIdFormat(row.docId, "productCategories", rowNum);
-    if (docIdFormatError) {
-      errors.push(docIdFormatError);
-    } else if (
-      row.docId &&
-      classifyDocIdTarget(row.docId, existingCategoryIds, allCategoryIds) === "unknown"
-    ) {
-      errors.push({ row: rowNum, field: "docId", reason: "Category not found — cannot update" });
-    }
+    return function validateCategoryRow(
+      row: Record<string, string>,
+      rowNum: number,
+    ): ImportError[] {
+        const errors: ImportError[] = [];
+        const existing = useDashboardStore.getState().categories;
+        const existingCategoryIds = existing.map((c) => c.docId!);
+        const allCategoryIds = useDashboardStore.getState().allCategories.map((c) => c.docId!);
 
-    if (!row.docId) {
-      if (!(CATEGORY_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
-        errors.push({ row: rowNum, field: "name", reason: "name is required for new categories" });
-      } else if (existingCategoryNames.includes(formatDocId(row.name))) {
-        errors.push({ row: rowNum, field: "name", reason: `Category "${row.name}" already exists` });
-      }
-    }
+        // Format first: a wrong-entity ID gets a message naming the right section, instead
+        // of the membership check's generic "not found". A soft-deleted target is not an
+        // error — the row restores it on write. Only an unknown ID fails.
+        const docIdFormatError = validateDocIdFormat(row.docId, "productCategories", rowNum);
+        if (docIdFormatError) {
+          errors.push(docIdFormatError);
+        } else if (
+          row.docId &&
+          classifyDocIdTarget(row.docId, existingCategoryIds, allCategoryIds) === "unknown"
+        ) {
+          errors.push({ row: rowNum, field: "docId", reason: "Category not found — cannot update" });
+        }
 
-    if (row.order && isNaN(Number(row.order))) {
-      errors.push({ row: rowNum, field: "order", reason: "Must be a valid number" });
-    }
+        if (!row.docId) {
+          if (!(CATEGORY_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
+            errors.push({ row: rowNum, field: "name", reason: "name is required for new categories" });
+          } else if (isCategoryNameTaken(existing, row.name)) {
+            errors.push({ row: rowNum, field: "name", reason: `Category "${row.name}" already exists` });
+          } else {
+            const key = row.name.trim().toLowerCase();
+            const claimedBy = claimedNames.get(key);
+            if (claimedBy !== undefined) {
+              errors.push({
+                row: rowNum,
+                field: "name",
+                reason: `Category "${row.name}" duplicates row ${claimedBy}`,
+              });
+            } else {
+              claimedNames.set(key, rowNum);
+            }
+          }
+        }
 
-    return errors;
+        if (row.order && isNaN(Number(row.order))) {
+          errors.push({ row: rowNum, field: "order", reason: "Must be a valid number" });
+        }
+
+        return errors;
+    };
   }
 
   async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
@@ -222,7 +244,7 @@ export default function CategoriesPage() {
     const result = await parseImportFile(file, {
       protectedFields: CATEGORY_PROTECTED_FIELDS,
       importableFields: CATEGORY_IMPORTABLE_FIELDS,
-      validateRow: validateCategoryRow,
+      validateRow: makeCategoryRowValidator(),
     });
 
     if (isFileError(result)) {

@@ -8,7 +8,12 @@ import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 
 interface DashboardStore {
   products: Product[];
-  /** Every product including soft-deleted ones, for resolving stale references. */
+  /**
+   * Every product including soft-deleted ones. Use only to resolve docId references
+   * (e.g. `classifyDocIdTarget`, where a soft-deleted target is a restore, not an error).
+   * Never use for name-uniqueness — a deleted record must not reserve its name.
+   * Check names against `products` instead.
+   */
   allProducts: Product[];
   modifiers: Modifier[];
   modifierGroups: ModifierGroup[];

@@ -234,7 +234,8 @@ export default function StoresPage() {
     const existingStores = useStoreStore.getState().stores;
     const existingStoreIds = existingStores.map((s) => s.docId);
     const allStoreIds = useStoreStore.getState().allStores.map((s) => s.docId);
-    const claimed: Record<"storeCode" | "printerId", Map<string, number>> = {
+    const claimed: Record<"name" | "storeCode" | "printerId", Map<string, number>> = {
+      name: new Map(),
       storeCode: new Map(),
       printerId: new Map(),
     };
@@ -280,10 +281,11 @@ export default function StoresPage() {
         }
       }
 
-      // Store code and printer ID must stay unique across all stores, and across
-      // the file itself. For updates the row's own store is excluded by docId;
-      // for creates there is no document to exclude yet.
+      // Name, store code and printer ID must stay unique across all stores, and
+      // across the file itself. For updates the row's own store is excluded by
+      // docId; for creates there is no document to exclude yet.
       ([
+        ["name", "Store name"],
         ["storeCode", "Store code"],
         ["printerId", "Printer ID"],
       ] as const).forEach(([field, label]) => {

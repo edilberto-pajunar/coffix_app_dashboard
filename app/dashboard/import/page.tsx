@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Upload, Download, Upload as UploadIcon, FileText, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { parseCSV } from "./utils/csvParser";
+import { parseCSV, ExistingRecord, RowError } from "./utils/csvParser";
 import { CollectionKey, COLLECTION_KEYS } from "./utils/importSchemas";
+import { useDashboardStore } from "@/app/dashboard/products/store/useDashboardStore";
+import { useStoreStore } from "@/app/dashboard/stores/store/useStoreStore";
 import { generateTemplate, COLLECTION_LABELS } from "./utils/templateGenerator";
 import { exportCollection, importCollection, ImportError } from "./service/BackendImportService";
 
@@ -32,13 +34,48 @@ export default function ImportPage() {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
+  const [rowErrors, setRowErrors] = useState<RowError[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const products = useDashboardStore((s) => s.products);
+  const categories = useDashboardStore((s) => s.categories);
+  const modifiers = useDashboardStore((s) => s.modifiers);
+  const modifierGroups = useDashboardStore((s) => s.modifierGroups);
+  const stores = useStoreStore((s) => s.stores);
+
+  // The unique-field check needs the records already in Firestore. Stores listens too
+  // because listenToAll reads the live store IDs from it when normalizing products.
+  useEffect(() => {
+    const unsubStores = useStoreStore.getState().listenToStores();
+    const unsubDashboard = useDashboardStore.getState().listenToAll();
+    return () => {
+      unsubStores();
+      unsubDashboard();
+    };
+  }, []);
+
+  /** Live (non-soft-deleted) records for the selected collection. */
+  function existingFor(col: CollectionKey): ExistingRecord[] {
+    switch (col) {
+      case "products":
+        return products;
+      case "productCategories":
+        return categories;
+      case "modifiers":
+        return modifiers;
+      case "modifierGroups":
+        return modifierGroups;
+      case "stores":
+        return stores;
+    }
+  }
 
   function resetFile() {
     setFileError(null);
     setPreviewPage(0);
     setCreates([]);
     setUpdates([]);
+    setRowErrors([]);
     setFile(null);
     setFileName(null);
     setSummary(null);
@@ -60,7 +97,8 @@ export default function ImportPage() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const result = parseCSV(text, collection);
+      const result = parseCSV(text, collection, existingFor(collection));
+      setRowErrors(result.errors);
 
       if (result.fileError) {
         setFileError(result.fileError);
@@ -71,8 +109,12 @@ export default function ImportPage() {
       }
 
       if (result.creates.length === 0 && result.updates.length === 0) {
+        // With per-row errors to show, the wrong-collection advice would be a red herring —
+        // the listed reasons say exactly why each row was rejected.
         setFileError(
-          `No valid rows found for "${COLLECTION_LABELS[collection]}". Check that you selected the right collection and that the CSV columns match its template.`,
+          result.errors.length
+            ? `No valid rows found for "${COLLECTION_LABELS[collection]}". Every row was rejected — see the errors below.`
+            : `No valid rows found for "${COLLECTION_LABELS[collection]}". Check that you selected the right collection and that the CSV columns match its template.`,
         );
         setCreates([]);
         setUpdates([]);
@@ -222,6 +264,23 @@ export default function ImportPage() {
         <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700">
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
           <span>{fileError}</span>
+        </div>
+      )}
+
+      {/* Per-row validation errors — these rows are left out of the preview and the import. */}
+      {rowErrors.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
+          <p className="text-sm font-medium text-red-800 flex items-center gap-1.5">
+            <AlertCircle size={14} />
+            {rowErrors.length} row(s) will be skipped
+          </p>
+          <ul className="text-xs text-red-600 list-disc list-inside max-h-40 overflow-y-auto space-y-0.5">
+            {rowErrors.map((e, i) => (
+              <li key={i}>
+                Row {e.row}: {e.message}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

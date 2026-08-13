@@ -180,40 +180,63 @@ export default function ModifierGroupsPage() {
         exportRowsToCSV(modifierGroups, MODIFIER_GROUP_EXPORTABLE_FIELDS, "modifier-groups");
     }
 
-    function validateGroupRow(row: Record<string, string>, rowNum: number): ImportError[] {
-        const errors: ImportError[] = [];
-        const existing = useDashboardStore.getState().modifierGroups;
-        const existingIds = existing.map((g) => g.docId!);
-        const allIds = useDashboardStore.getState().allModifierGroups.map((g) => g.docId!);
-        const existingNames = existing.map((g) => (g.name ?? "").trim().toLowerCase());
+    /**
+     * Returns a fresh validator per import. Names claimed by earlier rows are held in
+     * the closure, so a file cannot introduce duplicates among its own rows — the
+     * database check alone would pass every row and then write the collision.
+     */
+    function makeGroupRowValidator() {
+        const claimedNames = new Map<string, number>();
 
-        // Format first: a wrong-entity ID gets a message naming the right section, instead
-        // of the membership check's generic "not found". Also separates MODGRP- from MOD-.
-        // A soft-deleted target is not an error — the row restores it on write. Only an
-        // unknown ID fails.
-        const docIdFormatError = validateDocIdFormat(row.docId, "modifierGroups", rowNum);
-        if (docIdFormatError) {
-            errors.push(docIdFormatError);
-        } else if (
-            row.docId &&
-            classifyDocIdTarget(row.docId, existingIds, allIds) === "unknown"
-        ) {
-            errors.push({ row: rowNum, field: "docId", reason: "Modifier group not found — cannot update" });
-        }
+        return function validateGroupRow(
+            row: Record<string, string>,
+            rowNum: number,
+        ): ImportError[] {
+            const errors: ImportError[] = [];
+            const existing = useDashboardStore.getState().modifierGroups;
+            const existingIds = existing.map((g) => g.docId!);
+            const allIds = useDashboardStore.getState().allModifierGroups.map((g) => g.docId!);
 
-        if (!row.docId) {
-            if (!(MODIFIER_GROUP_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
-                errors.push({ row: rowNum, field: "name", reason: "name is required for new modifier groups" });
-            } else if (existingNames.includes(row.name.trim().toLowerCase())) {
-                errors.push({ row: rowNum, field: "name", reason: `Modifier group "${row.name}" already exists` });
+            // Format first: a wrong-entity ID gets a message naming the right section, instead
+            // of the membership check's generic "not found". Also separates MODGRP- from MOD-.
+            // A soft-deleted target is not an error — the row restores it on write. Only an
+            // unknown ID fails.
+            const docIdFormatError = validateDocIdFormat(row.docId, "modifierGroups", rowNum);
+            if (docIdFormatError) {
+                errors.push(docIdFormatError);
+            } else if (
+                row.docId &&
+                classifyDocIdTarget(row.docId, existingIds, allIds) === "unknown"
+            ) {
+                errors.push({ row: rowNum, field: "docId", reason: "Modifier group not found — cannot update" });
             }
-        }
 
-        if (row.order && isNaN(Number(row.order))) {
-            errors.push({ row: rowNum, field: "order", reason: "Must be a valid number" });
-        }
+            if (!row.docId) {
+                if (!(MODIFIER_GROUP_REQUIRED_FIELDS as readonly string[]).every((f) => row[f]?.trim())) {
+                    errors.push({ row: rowNum, field: "name", reason: "name is required for new modifier groups" });
+                } else if (isModifierGroupNameTaken(existing, row.name)) {
+                    errors.push({ row: rowNum, field: "name", reason: `Modifier group "${row.name}" already exists` });
+                } else {
+                    const key = row.name.trim().toLowerCase();
+                    const claimedBy = claimedNames.get(key);
+                    if (claimedBy !== undefined) {
+                        errors.push({
+                            row: rowNum,
+                            field: "name",
+                            reason: `Modifier group "${row.name}" duplicates row ${claimedBy}`,
+                        });
+                    } else {
+                        claimedNames.set(key, rowNum);
+                    }
+                }
+            }
 
-        return errors;
+            if (row.order && isNaN(Number(row.order))) {
+                errors.push({ row: rowNum, field: "order", reason: "Must be a valid number" });
+            }
+
+            return errors;
+        };
     }
 
     async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
@@ -224,7 +247,7 @@ export default function ModifierGroupsPage() {
         const result = await parseImportFile(file, {
             protectedFields: MODIFIER_GROUP_PROTECTED_FIELDS,
             importableFields: MODIFIER_GROUP_IMPORTABLE_FIELDS,
-            validateRow: validateGroupRow,
+            validateRow: makeGroupRowValidator(),
         });
 
         if (isFileError(result)) {
