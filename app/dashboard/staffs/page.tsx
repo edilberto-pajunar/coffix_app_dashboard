@@ -75,6 +75,12 @@ function toggleStoreId(currentIds: string[], storeId: string): string[] {
     : [...currentIds, storeId];
 }
 
+function countOtherActiveAdmins(staffs: Staff[], excludeDocId?: string): number {
+  return staffs.filter(
+    (s) => s.role === "admin" && !s.disabled && s.docId !== excludeDocId
+  ).length;
+}
+
 // ─── Dialog sub-component ─────────────────────────────────────────────────────
 
 type StaffDialogProps = {
@@ -540,6 +546,15 @@ export default function StaffsPage() {
       toast.error("Please fix the errors before submitting.");
       return;
     }
+    if (
+      editTarget.role === "admin" &&
+      !editTarget.disabled &&
+      editForm.disabled &&
+      countOtherActiveAdmins(staffs, editTarget.docId) === 0
+    ) {
+      toast.error("At least one admin must remain enabled. Enable or assign another admin first.");
+      return;
+    }
     setEditLoading(true);
     try {
       await StaffService.updateStaff(editTarget.docId, {
@@ -569,6 +584,10 @@ export default function StaffsPage() {
 
   // ── Delete handler
   async function handleDelete(staff: Staff) {
+    if (staff.role === "admin" && !staff.disabled && countOtherActiveAdmins(staffs, staff.docId) === 0) {
+      toast.error("At least one admin must remain. Assign another admin before deleting this one.");
+      return;
+    }
     if (!window.confirm(`Delete ${staff.email}? This cannot be undone.`)) return;
     try {
       await StaffService.deleteStaff(staff.docId);
