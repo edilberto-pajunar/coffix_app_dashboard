@@ -622,6 +622,8 @@ export default function ProductsPage() {
   }
 
   async function handleCreate() {
+    const priceNum = parseFloat(form.price);
+    const costNum = parseFloat(form.cost);
     const newErrors: Partial<Record<keyof NewProductForm, boolean>> = {
       name: !form.name.trim(),
       price: form.price === "",
@@ -633,6 +635,14 @@ export default function ProductsPage() {
     if (Object.values(newErrors).some(Boolean)) {
       setErrors(newErrors);
       toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    const invalidPrice = isNaN(priceNum) || priceNum <= 0;
+    const invalidCost = isNaN(costNum) || costNum <= 0;
+    if (invalidPrice || invalidCost) {
+      setErrors({ ...newErrors, price: invalidPrice, cost: invalidCost });
+      toast.error("Price and cost must be greater than 0.");
       return;
     }
 
@@ -650,8 +660,8 @@ export default function ProductsPage() {
       await ProductService.createProduct({
         name: form.name.trim(),
         ...(imageUrl && { imageUrl }),
-        price: parseFloat(form.price),
-        cost: parseFloat(form.cost),
+        price: priceNum,
+        cost: costNum,
         order: minOrder - 1,
         categoryId: form.categoryId,
         modifierGroupIds: form.modifierGroupIds,
@@ -932,7 +942,7 @@ export default function ProductsPage() {
                     onChange={(e) => setField("price", e.target.value)}
                   />
                 </div>
-                {errors.price && <p className="mt-1 text-xs text-error">Required.</p>}
+                {errors.price && <p className="mt-1 text-xs text-error">Required and must be greater than 0.</p>}
               </div>
               <div>
                 <label className="mb-1.5 block text-xs text-black">Cost *</label>
@@ -948,7 +958,7 @@ export default function ProductsPage() {
                     onChange={(e) => setField("cost", e.target.value)}
                   />
                 </div>
-                {errors.cost && <p className="mt-1 text-xs text-error">Required.</p>}
+                {errors.cost && <p className="mt-1 text-xs text-error">Required and must be greater than 0.</p>}
               </div>
             </div>
 

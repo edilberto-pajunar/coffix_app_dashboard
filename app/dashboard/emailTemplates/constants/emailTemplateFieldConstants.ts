@@ -8,7 +8,6 @@ export const EMAIL_TEMPLATE_PROTECTED_FIELDS = [
 export const EMAIL_TEMPLATE_IMPORTABLE_FIELDS: string[] = [];
 
 export const EMAIL_TEMPLATE_EXPORTABLE_FIELDS = [
-  "docId",
   "name",
   "subject",
   "notes",

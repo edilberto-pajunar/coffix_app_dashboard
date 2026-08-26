@@ -85,7 +85,7 @@ export default function ProductDetailPage() {
 
     const [dialog, setDialog] = useState<DialogMode>(null);
     const [productForm, setProductForm] = useState<Partial<Product>>({});
-    const [errors, setErrors] = useState<{ name?: boolean }>({});
+    const [errors, setErrors] = useState<{ name?: boolean; price?: boolean; cost?: boolean }>({});
     const [priceStr, setPriceStr] = useState<string>("0.00");
     const [costStr, setCostStr] = useState<string>("0.00");
     const [selectedGroupId, setSelectedGroupId] = useState<string>("");
@@ -209,12 +209,22 @@ export default function ProductDetailPage() {
             return;
         }
 
+        const priceNum = parseFloat(priceStr);
+        const costNum = parseFloat(costStr);
+        const invalidPrice = isNaN(priceNum) || priceNum <= 0;
+        const invalidCost = isNaN(costNum) || costNum <= 0;
+        if (invalidPrice || invalidCost) {
+            setErrors({ price: invalidPrice, cost: invalidCost });
+            toast.error("Price and cost must be greater than 0.");
+            return;
+        }
+
         setErrors({});
         setLoading(true);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { docId: _, ...rest } = productForm as Product;
         try {
-            await ProductService.updateProduct(product.docId, rest);
+            await ProductService.updateProduct(product.docId, { ...rest, price: priceNum, cost: costNum });
             log({
                 category: LOG_CATEGORY.PRODUCT,
                 severityLevel: LOG_SEVERITY.HIGH,
@@ -565,7 +575,7 @@ export default function ProductDetailPage() {
                                             <input
                                                 type="text"
                                                 inputMode="decimal"
-                                                className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                                className={`w-full rounded-lg border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.price ? "border-error" : "border-border"}`}
                                                 placeholder="0.00"
                                                 value={priceStr}
                                                 onChange={(e) => setPriceStr(e.target.value)}
@@ -577,6 +587,7 @@ export default function ProductDetailPage() {
                                                 }}
                                             />
                                         </div>
+                                        {errors.price && <p className="mt-1 text-xs text-error">Price must be greater than 0.</p>}
                                     </div>
                                     <div>
                                         <label className="mb-1 block text-xs text-black capitalize">Cost</label>
@@ -585,7 +596,7 @@ export default function ProductDetailPage() {
                                             <input
                                                 type="text"
                                                 inputMode="decimal"
-                                                className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                                                className={`w-full rounded-lg border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary ${errors.cost ? "border-error" : "border-border"}`}
                                                 placeholder="0.00"
                                                 value={costStr}
                                                 onChange={(e) => setCostStr(e.target.value)}
@@ -597,6 +608,7 @@ export default function ProductDetailPage() {
                                                 }}
                                             />
                                         </div>
+                                        {errors.cost && <p className="mt-1 text-xs text-error">Cost must be greater than 0.</p>}
                                     </div>
                                     <MultiSelect
                                         label="Available to Stores"

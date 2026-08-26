@@ -37,6 +37,7 @@ export default function ModifierGroupDetailPage() {
   const [groupForm, setGroupForm] = useState({ name: "" });
   const [groupErrors, setGroupErrors] = useState<{ name?: boolean }>({});
   const [modifierForm, setModifierForm] = useState<ModifierForm>(emptyModifierForm);
+  const [modifierErrors, setModifierErrors] = useState<{ label?: boolean; priceDelta?: boolean; cost?: boolean }>({});
   const [activeModifierId, setActiveModifierId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [orderedModifiers, setOrderedModifiers] = useState<Modifier[]>([]);
@@ -83,6 +84,7 @@ export default function ModifierGroupDetailPage() {
       cost: formatCurrencyInput(String(m.cost ?? 0)),
       isDefault: m.isDefault ?? false,
     });
+    setModifierErrors({});
     setDialog("edit-modifier");
   }
 
@@ -93,6 +95,7 @@ export default function ModifierGroupDetailPage() {
 
   function openAddModifier() {
     setModifierForm(emptyModifierForm);
+    setModifierErrors({});
     setDialog("add-modifier");
   }
 
@@ -165,6 +168,18 @@ export default function ModifierGroupDetailPage() {
 
   async function handleSaveModifier() {
     if (!group?.docId) return;
+
+    const priceNum = parseFloat(modifierForm.priceDelta);
+    const costNum = parseFloat(modifierForm.cost);
+    const invalidPrice = isNaN(priceNum) || priceNum <= 0;
+    const invalidCost = isNaN(costNum) || costNum <= 0;
+    if (invalidPrice || invalidCost) {
+      setModifierErrors({ priceDelta: invalidPrice, cost: invalidCost });
+      toast.error("Price and cost must be greater than 0.");
+      return;
+    }
+
+    setModifierErrors({});
     setLoading(true);
     try {
       if (dialog === "add-modifier") {
@@ -177,8 +192,8 @@ export default function ModifierGroupDetailPage() {
         }
         const ref = await ProductService.createModifier({
           label: modifierForm.label,
-          priceDelta: parseFloat(modifierForm.priceDelta) || 0,
-          cost: parseFloat(modifierForm.cost) || 0,
+          priceDelta: priceNum,
+          cost: costNum,
           isDefault: modifierForm.isDefault,
           groupId: group.docId,
           createdAt: new Date(),
@@ -205,8 +220,8 @@ export default function ModifierGroupDetailPage() {
         }
         await ProductService.updateModifier(activeModifierId, {
           label: modifierForm.label,
-          priceDelta: parseFloat(modifierForm.priceDelta) || 0,
-          cost: parseFloat(modifierForm.cost) || 0,
+          priceDelta: priceNum,
+          cost: costNum,
           isDefault: modifierForm.isDefault,
         });
         log({
@@ -451,12 +466,13 @@ export default function ModifierGroupDetailPage() {
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                        className={`w-full rounded-lg border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary ${modifierErrors.priceDelta ? "border-error" : "border-border"}`}
                         value={modifierForm.priceDelta}
                         onChange={(e) => setModifierForm((f) => ({ ...f, priceDelta: e.target.value }))}
                         onBlur={(e) => setModifierForm((f) => ({ ...f, priceDelta: formatCurrencyInput(e.target.value) }))}
                       />
                     </div>
+                    {modifierErrors.priceDelta && <p className="mt-1 text-xs text-error">Price must be greater than 0.</p>}
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-light-grey">Cost</label>
@@ -465,12 +481,13 @@ export default function ModifierGroupDetailPage() {
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="w-full rounded-lg border border-border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary"
+                        className={`w-full rounded-lg border pl-7 pr-3 py-2 text-sm text-black outline-none focus:border-primary ${modifierErrors.cost ? "border-error" : "border-border"}`}
                         value={modifierForm.cost}
                         onChange={(e) => setModifierForm((f) => ({ ...f, cost: e.target.value }))}
                         onBlur={(e) => setModifierForm((f) => ({ ...f, cost: formatCurrencyInput(e.target.value) }))}
                       />
                     </div>
+                    {modifierErrors.cost && <p className="mt-1 text-xs text-error">Cost must be greater than 0.</p>}
                   </div>
                   <label htmlFor="modifier-is-default" className="flex cursor-pointer items-center gap-2 text-sm text-black">
                     <Checkbox

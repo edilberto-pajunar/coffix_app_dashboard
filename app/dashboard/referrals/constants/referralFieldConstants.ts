@@ -8,7 +8,6 @@ export const REFERRAL_PROTECTED_FIELDS = [
 export const REFERRAL_IMPORTABLE_FIELDS = ["disabled"] as const;
 
 export const REFERRAL_EXPORTABLE_FIELDS = [
-  "docId",
   "referralTime",
   "referrer",
   "referee",

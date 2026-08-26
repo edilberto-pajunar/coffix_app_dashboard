@@ -13,7 +13,6 @@ export const COUPON_IMPORTABLE_FIELDS = [
 ] as const;
 
 export const COUPON_EXPORTABLE_FIELDS = [
-  "docId",
   "type",
   "amount",
   "expiryDate",

@@ -243,9 +243,8 @@ export default function CouponsPage() {
   // ── CSV Export ──
 
   function exportToCSV() {
-    const headerRow = ["docId", "type", "amount", "expiryDate", "storeId", "notes", "customerEmail", "createdAt"];
+    const headerRow = ["type", "amount", "expiryDate", "storeId", "notes", "customerEmail", "createdAt"];
     const rows = filtered.map((c) => [
-      escapeCSV(c.docId ?? ""),
       escapeCSV(c.type ?? ""),
       String(c.amount ?? ""),
       tsToISO(c.expiryDate),

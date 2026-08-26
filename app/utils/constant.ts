@@ -2,7 +2,7 @@ import { EmailVariableGroup } from "../dashboard/emailTemplates/constants/emailV
 
 const COLLECTION_GLOBAL_SETTINGS = "EQ0i4V6H47Ra7yMCdG7B";
 export const GLOBAL_COLLECTION_LOG_ID = "VmvT6HFpSMe6pC8AyyeR";
-const WEBAPP_VERSION = "1.0.0+66";
+const WEBAPP_VERSION = "1.0.0+67";
 
 // Zero-padded width of the numeric part of a sequential ID (PRD-000001). Lives here
 // rather than in generateId.ts so app/utils/idFormat.ts can validate against it without

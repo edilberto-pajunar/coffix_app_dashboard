@@ -9,7 +9,6 @@ export const STAFF_IMPORTABLE_FIELDS = [
 ] as const;
 
 export const STAFF_EXPORTABLE_FIELDS = [
-  "docId",
   "email",
   "createdAt",
   "role",

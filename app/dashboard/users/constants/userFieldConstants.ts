@@ -27,7 +27,6 @@ export const USER_IMPORTABLE_FIELDS = [
 ] as const;
 
 export const USER_EXPORTABLE_FIELDS = [
-  "docId",
   "email",
   "creditAvailable",
   "emailVerified",
